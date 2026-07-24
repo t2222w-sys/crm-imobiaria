@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabaseClient';
+import { supabase, isSupabaseConfigured } from './lib/supabaseClient';
 import { 
   Home, 
   Users, 
@@ -95,6 +95,52 @@ interface Toast {
 }
 
 function App() {
+  // Validação de variáveis de ambiente em produção (Vercel)
+  if (!isSupabaseConfigured) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#080c14',
+        color: '#f8fafc',
+        fontFamily: 'sans-serif',
+        padding: '2rem',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          backgroundColor: '#0f172a',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          padding: '2.5rem',
+          borderRadius: '12px',
+          maxWidth: '500px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
+        }}>
+          <AlertTriangle size={48} style={{ color: '#ef4444', marginBottom: '1rem' }} />
+          <h2 style={{ marginBottom: '1rem', fontFamily: 'Outfit, sans-serif' }}>Configuração em Falta</h2>
+          <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+            A aplicação não conseguiu ligar ao Supabase porque as variáveis de ambiente necessárias não foram encontradas.
+          </p>
+          <div style={{ textAlign: 'left', backgroundColor: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '6px', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '1.5rem', width: '100%' }}>
+            <strong>Variáveis necessárias nas definições do Vercel:</strong>
+            <ul style={{ marginLeft: '1.25rem', marginTop: '0.5rem' }}>
+              <li><code>VITE_SUPABASE_URL</code></li>
+              <li><code>VITE_SUPABASE_ANON_KEY</code></li>
+            </ul>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
+            Adicione estas variáveis no painel da Vercel (Settings &gt; Environment Variables) e faça um novo Deploy.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Tabs e Estados Globais
   const [activeTab, setActiveTab] = useState<'vendedores' | 'compradores'>('vendedores');
   const [activeMainTab, setActiveMainTab] = useState<'matching' | 'calendario'>('matching'); // NOVO
@@ -251,7 +297,7 @@ function App() {
         .limit(10);
 
       if (!error && data) {
-        const distinct = Array.from(new Set(data.map(item => item.concelho)));
+        const distinct = Array.from(new Set((data as { concelho: string }[]).map(item => item.concelho)));
         setConcelhoSugestoes(distinct);
       }
     } catch (err) {
@@ -277,7 +323,7 @@ function App() {
 
       const { data, error } = await query.limit(10);
       if (!error && data) {
-        const distinct = Array.from(new Set(data.map(item => item.freguesia)));
+        const distinct = Array.from(new Set((data as { freguesia: string }[]).map(item => item.freguesia)));
         setFreguesiaSugestoes(distinct);
       }
     } catch (err) {
