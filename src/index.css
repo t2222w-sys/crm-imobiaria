@@ -622,7 +622,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 1rem;
 }
 
@@ -1393,15 +1393,22 @@ body {
   /* Otimização do Kanban no mobile */
   .kanban-board {
     padding: 0.25rem;
-    margin-left: -0.25rem;
-    margin-right: -0.25rem;
-    width: calc(100% + 0.5rem);
-    height: calc(100vh - 195px);
+    margin-left: 0;
+    margin-right: 0;
+    width: 100%;
+    height: auto;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: visible;
+    gap: 1rem;
   }
 
   .kanban-column {
-    flex: 0 0 88vw;
+    flex: none;
+    width: 100% !important;
+    min-height: 120px;
     padding: 0.85rem;
+    box-sizing: border-box;
   }
 
   .kanban-card {
@@ -1522,4 +1529,23 @@ body {
     font-size: 0.85rem;
     background-color: var(--bg-app);
   }
+
+  .modal-content-card {
+    max-height: 94vh !important;
+  }
+
+  .modal-body {
+    padding-bottom: 75px !important;
+  }
+}
+
+/* Validação de Formulários - Destaque de Erros */
+.input-error {
+  border-color: var(--urgency-alta) !important;
+  box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.15) !important;
+  background-color: rgba(225, 29, 72, 0.01) !important;
+}
+.input-error:focus {
+  border-color: var(--urgency-alta) !important;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.25) !important;
 }

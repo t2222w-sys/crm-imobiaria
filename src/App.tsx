@@ -110,6 +110,8 @@ interface CalendarEvent {
   label: string;
   desc?: string;
   originalId: string;
+  compradorId?: string | null;
+  imovelId?: string | null;
 }
 
 interface Toast {
@@ -214,10 +216,15 @@ function App() {
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [compradorFormErrors, setCompradorFormErrors] = useState<string[]>([]);
+  const [imovelFormErrors, setImovelFormErrors] = useState<string[]>([]);
+
+  const [selectedMatchDetail, setSelectedMatchDetail] = useState<Match | null>(null);
 
   // Estados de Edição
   const [editingImovelId, setEditingImovelId] = useState<string | null>(null);
   const [editingCompradorId, setEditingCompradorId] = useState<string | null>(null);
+  const [editingAtividadeId, setEditingAtividadeId] = useState<string | null>(null);
 
   // Filtros Imóveis
   const [fImovelPesquisa, setFImovelPesquisa] = useState('');
@@ -407,6 +414,10 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    fetchData();
+  }, []);
+
   // Autocomplete
   const fetchConcelhos = async (pesquisa: string) => {
     if (pesquisa.trim().length < 2) {
@@ -458,10 +469,23 @@ function App() {
   const handleAddImovel = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!vNome.trim() || !vContacto.trim() || !vPrecoObj || !vPrecoMin || !vArea || !vRua.trim() || !vCidade.trim() || !vFreguesia.trim()) {
-      showToast('Preenche todos os campos obrigatórios.', 'error');
+    const errors: string[] = [];
+    if (!vNome.trim()) errors.push('nome');
+    if (!vContacto.trim()) errors.push('contacto');
+    if (!vPrecoObj) errors.push('precoObj');
+    if (!vPrecoMin) errors.push('precoMin');
+    if (!vArea) errors.push('area');
+    if (!vRua.trim()) errors.push('rua');
+    if (!vCidade.trim()) errors.push('cidade');
+    if (!vFreguesia.trim()) errors.push('freguesia');
+
+    if (errors.length > 0) {
+      setImovelFormErrors(errors);
+      showToast('Preenche os campos obrigatórios assinalados a vermelho.', 'error');
       return;
     }
+
+    setImovelFormErrors([]);
 
     const pObj = parseFloat(vPrecoObj);
     const pMin = parseFloat(vPrecoMin);
@@ -533,6 +557,7 @@ function App() {
       setVObs('');
       setVEstadoImovel('Ativo');
       setVOrigemContacto('Outro');
+      setImovelFormErrors([]);
       setIsImovelModalOpen(false);
       
       fetchData();
@@ -544,10 +569,21 @@ function App() {
   const handleAddComprador = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!cNome.trim() || !cContacto.trim() || !cOrcamento || cTipologias.length === 0 || cTiposImovel.length === 0 || cZonas.length === 0) {
-      showToast('Preenche todos os campos obrigatórios.', 'error');
+    const errors: string[] = [];
+    if (!cNome.trim()) errors.push('nome');
+    if (!cContacto.trim()) errors.push('contacto');
+    if (!cOrcamento) errors.push('orcamento');
+    if (cTipologias.length === 0) errors.push('tipologias');
+    if (cTiposImovel.length === 0) errors.push('tiposImovel');
+    if (cZonas.length === 0) errors.push('zonas');
+
+    if (errors.length > 0) {
+      setCompradorFormErrors(errors);
+      showToast('Preenche os campos obrigatórios assinalados a vermelho.', 'error');
       return;
     }
+
+    setCompradorFormErrors([]);
 
     const leadPayload = {
       comprador_nome: cNome,
@@ -603,6 +639,7 @@ function App() {
       setCDataContacto('');
       setCEstadoComprador('Ativo');
       setCOrigemContacto('Outro');
+      setCompradorFormErrors([]);
       setIsCompradorModalOpen(false);
 
       fetchData();
@@ -628,9 +665,19 @@ function App() {
     };
 
     try {
-      const { error } = await supabase.from('atividades_agenda').insert([payload]);
-      if (error) throw error;
-      showToast('Atividade agendada!');
+      if (editingAtividadeId) {
+        const { error } = await supabase
+          .from('atividades_agenda')
+          .update(payload)
+          .eq('id', editingAtividadeId);
+        if (error) throw error;
+        showToast('Atividade atualizada!');
+        setEditingAtividadeId(null);
+      } else {
+        const { error } = await supabase.from('atividades_agenda').insert([payload]);
+        if (error) throw error;
+        showToast('Atividade agendada!');
+      }
       
       setActTipos([]);
       setActDataHora('');
@@ -639,6 +686,7 @@ function App() {
       setActNotas('');
       setAssociarCliente(false);
       setAssociarImovel(false);
+      setEditingAtividadeId(null);
       setIsAtividadeModalOpen(false);
 
       fetchData();
@@ -828,6 +876,23 @@ function App() {
     setIsCompradorModalOpen(true);
   };
 
+  const startEditAtividade = (id: string) => {
+    const act = atividades.find(a => a.id === id);
+    if (!act) return;
+    setEditingAtividadeId(act.id);
+    setActTipos(act.tipos_atividade);
+    const date = new Date(act.data_hora);
+    const offset = date.getTimezoneOffset() * 60000;
+    const dateLocal = new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    setActDataHora(dateLocal);
+    setActCompradorId(act.comprador_id || '');
+    setActImovelId(act.imovel_id || '');
+    setActNotas(act.notas || '');
+    setAssociarCliente(!!act.comprador_id);
+    setAssociarImovel(!!act.imovel_id);
+    setIsAtividadeModalOpen(true);
+  };
+
   const handleUpdateInteracao = async (compradorId: string, imovelId: string, estado: string, notas: string) => {
     try {
       const { error } = await supabase
@@ -899,8 +964,12 @@ function App() {
   const handleAddZona = () => {
     const concelho = cZonaInput.trim();
     if (concelho && !cZonas.includes(concelho)) {
-      setCZonas([...cZonas, concelho]);
+      const novasZonas = [...cZonas, concelho];
+      setCZonas(novasZonas);
       setCZonaInput('');
+      if (compradorFormErrors.includes('zonas') && novasZonas.length > 0) {
+        setCompradorFormErrors(compradorFormErrors.filter(err => err !== 'zonas'));
+      }
     }
   };
 
@@ -909,26 +978,40 @@ function App() {
   };
 
   const handleToggleTipologia = (tip: string) => {
+    let novasTipologias = [];
     if (cTipologias.includes(tip)) {
       if (cTipologias.length > 1) {
-        setCTipologias(cTipologias.filter(t => t !== tip));
+        novasTipologias = cTipologias.filter(t => t !== tip);
+        setCTipologias(novasTipologias);
       } else {
         showToast('Selecione pelo menos uma tipologia.', 'error');
+        return;
       }
     } else {
-      setCTipologias([...cTipologias, tip]);
+      novasTipologias = [...cTipologias, tip];
+      setCTipologias(novasTipologias);
+    }
+    if (compradorFormErrors.includes('tipologias') && novasTipologias.length > 0) {
+      setCompradorFormErrors(compradorFormErrors.filter(err => err !== 'tipologias'));
     }
   };
 
   const handleToggleTipoImovel = (tipo: string) => {
+    let novosTipos = [];
     if (cTiposImovel.includes(tipo)) {
       if (cTiposImovel.length > 1) {
-        setCTiposImovel(cTiposImovel.filter(t => t !== tipo));
+        novosTipos = cTiposImovel.filter(t => t !== tipo);
+        setCTiposImovel(novosTipos);
       } else {
         showToast('Selecione pelo menos um tipo de imóvel.', 'error');
+        return;
       }
     } else {
-      setCTiposImovel([...cTiposImovel, tipo]);
+      novosTipos = [...cTiposImovel, tipo];
+      setCTiposImovel(novosTipos);
+    }
+    if (compradorFormErrors.includes('tiposImovel') && novosTipos.length > 0) {
+      setCompradorFormErrors(compradorFormErrors.filter(err => err !== 'tiposImovel'));
     }
   };
 
@@ -1079,7 +1162,8 @@ function App() {
         title: `Registo de Imóvel`,
         label: `${v.tipo_imovel} (${v.tipologia}) - ${v.proprietario_nome}`,
         desc: `Preço: ${formatCurrency(v.preco_objetivo)} em ${v.freguesia}, ${v.cidade}.`,
-        originalId: v.id
+        originalId: v.id,
+        imovelId: v.id
       });
 
       const u = getLocalDateFromISO(v.updated_at);
@@ -1090,7 +1174,8 @@ function App() {
           title: `Atualização de Imóvel`,
           label: `${v.tipo_imovel} (${v.tipologia}) - ${v.proprietario_nome}`,
           desc: `Alterado em ${v.freguesia}.`,
-          originalId: v.id
+          originalId: v.id,
+          imovelId: v.id
         });
       }
     });
@@ -1103,7 +1188,8 @@ function App() {
         title: `Novo Comprador (Lead)`,
         label: `${c.comprador_nome} - Contacto: ${c.comprador_contacto}`,
         desc: `Orçamento Máx: ${formatCurrency(c.orcamento_maximo)}.`,
-        originalId: c.id
+        originalId: c.id,
+        compradorId: c.id
       });
 
       const u = getLocalDateFromISO(c.updated_at);
@@ -1114,7 +1200,8 @@ function App() {
           title: `Atualização de Comprador`,
           label: `${c.comprador_nome}`,
           desc: `Dados de requisitos reajustados.`,
-          originalId: c.id
+          originalId: c.id,
+          compradorId: c.id
         });
       }
 
@@ -1126,7 +1213,8 @@ function App() {
           title: `Contacto com Cliente`,
           label: `${c.comprador_nome}`,
           desc: `Contacto efetuado com sucesso.`,
-          originalId: c.id
+          originalId: c.id,
+          compradorId: c.id
         });
       }
     });
@@ -1147,7 +1235,9 @@ function App() {
         title: act.tipos_atividade.join(' + '),
         label: labels.length > 0 ? labels.join(' | ') : 'Sem entidades associadas',
         desc: act.notas || undefined,
-        originalId: act.id
+        originalId: act.id,
+        compradorId: act.comprador_id,
+        imovelId: act.imovel_id
       });
     });
 
@@ -1448,7 +1538,7 @@ function App() {
                     </thead>
                     <tbody>
                       {allMatches.slice(0, 5).map((match, idx) => (
-                        <tr key={idx}>
+                        <tr key={idx} onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
                           <td style={{ fontWeight: 700 }}>{match.comprador_nome}</td>
                           <td>{match.tipologia} em {match.freguesia}</td>
                           <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(match.preco_objetivo)}</td>
@@ -1482,7 +1572,7 @@ function App() {
                 <div className="mobile-only-view">
                   <div className="mobile-cards-list" style={{ padding: '0' }}>
                     {allMatches.slice(0, 5).map((match, idx) => (
-                      <div key={idx} className="mobile-item-card match-card">
+                      <div key={idx} className="mobile-item-card match-card" onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
                         <div className="mobile-card-row header">
                           <span className="mobile-card-name">{match.comprador_nome}</span>
                           <span 
@@ -1570,6 +1660,7 @@ function App() {
                       onStatusChange={handleUpdateInteracao}
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
+                      onSelectMatchDetail={setSelectedMatchDetail}
                     />
                   ))}
                 </div>
@@ -1591,6 +1682,7 @@ function App() {
                       onStatusChange={handleUpdateInteracao}
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
+                      onSelectMatchDetail={setSelectedMatchDetail}
                     />
                   ))}
                 </div>
@@ -1612,6 +1704,7 @@ function App() {
                       onStatusChange={handleUpdateInteracao}
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
+                      onSelectMatchDetail={setSelectedMatchDetail}
                     />
                   ))}
                 </div>
@@ -1633,6 +1726,7 @@ function App() {
                       onStatusChange={handleUpdateInteracao}
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
+                      onSelectMatchDetail={setSelectedMatchDetail}
                     />
                   ))}
                 </div>
@@ -2381,23 +2475,69 @@ function App() {
                           )}
                         </div>
 
-                        {evt.type === 'agenda' && (
-                          <button 
-                            onClick={() => handleDeleteAtividade(evt.originalId)}
-                            style={{ 
-                              position: 'absolute', 
-                              right: '12px', 
-                              top: '12px', 
-                              border: 'none', 
-                              background: 'none', 
-                              color: 'var(--text-muted)', 
-                              cursor: 'pointer' 
-                            }}
-                            title="Eliminar atividade"
-                          >
-                            <Trash2 size={15} style={{ color: 'var(--urgency-alta)' }} />
-                          </button>
-                        )}
+                        <div style={{ 
+                          position: 'absolute', 
+                          right: '12px', 
+                          top: '12px', 
+                          display: 'flex', 
+                          gap: '8px',
+                          alignItems: 'center' 
+                        }}>
+                          {/* Editar Cliente Associado */}
+                          {(evt.compradorId || evt.type === 'comprador' || evt.type === 'contacto') && (
+                            <button
+                              onClick={() => {
+                                const compId = evt.compradorId || evt.originalId;
+                                const comp = compradores.find(c => c.id === compId);
+                                if (comp) startEditComprador(comp);
+                              }}
+                              style={{ 
+                                border: 'none', 
+                                background: 'none', 
+                                color: 'var(--accent-blue)', 
+                                cursor: 'pointer',
+                                padding: '4px'
+                              }}
+                              title="Editar Perfil do Cliente"
+                            >
+                              <Users size={15} />
+                            </button>
+                          )}
+
+                          {/* Editar Atividade em si */}
+                          {evt.type === 'agenda' && (
+                            <button
+                              onClick={() => startEditAtividade(evt.originalId)}
+                              style={{ 
+                                border: 'none', 
+                                background: 'none', 
+                                color: 'var(--text-primary)', 
+                                cursor: 'pointer',
+                                padding: '4px'
+                              }}
+                              title="Editar Atividade"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                          )}
+
+                          {/* Eliminar Atividade */}
+                          {evt.type === 'agenda' && (
+                            <button 
+                              onClick={() => handleDeleteAtividade(evt.originalId)}
+                              style={{ 
+                                border: 'none', 
+                                background: 'none', 
+                                color: 'var(--text-muted)', 
+                                cursor: 'pointer',
+                                padding: '4px'
+                              }}
+                              title="Eliminar Atividade"
+                            >
+                              <Trash2 size={15} style={{ color: 'var(--urgency-alta)' }} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -2498,7 +2638,13 @@ function App() {
                 <input 
                   type="text" 
                   value={vNome}
-                  onChange={(e) => setVNome(e.target.value)}
+                  onChange={(e) => {
+                    setVNome(e.target.value);
+                    if (imovelFormErrors.includes('nome')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'nome'));
+                    }
+                  }}
+                  className={imovelFormErrors.includes('nome') ? 'input-error' : ''}
                   placeholder="Ex: Manuel Antunes"
                   required
                 />
@@ -2509,7 +2655,13 @@ function App() {
                 <input 
                   type="text" 
                   value={vContacto}
-                  onChange={(e) => setVContacto(e.target.value)}
+                  onChange={(e) => {
+                    setVContacto(e.target.value);
+                    if (imovelFormErrors.includes('contacto')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'contacto'));
+                    }
+                  }}
+                  className={imovelFormErrors.includes('contacto') ? 'input-error' : ''}
                   placeholder="Ex: 912345678"
                   required
                 />
@@ -2529,7 +2681,13 @@ function App() {
                 <input 
                   type="number" 
                   value={vPrecoObj}
-                  onChange={(e) => setVPrecoObj(e.target.value)}
+                  onChange={(e) => {
+                    setVPrecoObj(e.target.value);
+                    if (imovelFormErrors.includes('precoObj')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'precoObj'));
+                    }
+                  }}
+                  className={imovelFormErrors.includes('precoObj') ? 'input-error' : ''}
                   placeholder="Ex: 245000"
                   required
                 />
@@ -2540,7 +2698,13 @@ function App() {
                 <input 
                   type="number" 
                   value={vPrecoMin}
-                  onChange={(e) => setVPrecoMin(e.target.value)}
+                  onChange={(e) => {
+                    setVPrecoMin(e.target.value);
+                    if (imovelFormErrors.includes('precoMin')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'precoMin'));
+                    }
+                  }}
+                  className={imovelFormErrors.includes('precoMin') ? 'input-error' : ''}
                   placeholder="Preço confidencial"
                   required
                 />
@@ -2563,7 +2727,13 @@ function App() {
                 <input 
                   type="number" 
                   value={vArea}
-                  onChange={(e) => setVArea(e.target.value)}
+                  onChange={(e) => {
+                    setVArea(e.target.value);
+                    if (imovelFormErrors.includes('area')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'area'));
+                    }
+                  }}
+                  className={imovelFormErrors.includes('area') ? 'input-error' : ''}
                   placeholder="Ex: 110"
                   required
                 />
@@ -2574,7 +2744,13 @@ function App() {
                 <input 
                   type="text" 
                   value={vAndar}
-                  onChange={(e) => setVAndar(e.target.value)}
+                  onChange={(e) => {
+                    setVAndar(e.target.value);
+                    if (imovelFormErrors.includes('andar')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'andar'));
+                    }
+                  }}
+                  className={imovelFormErrors.includes('andar') ? 'input-error' : ''}
                   placeholder="Ex: R/C ou 3º"
                   required
                 />
@@ -2613,7 +2789,13 @@ function App() {
                 <input 
                   type="text" 
                   value={vRua}
-                  onChange={(e) => setVRua(e.target.value)}
+                  onChange={(e) => {
+                    setVRua(e.target.value);
+                    if (imovelFormErrors.includes('rua')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'rua'));
+                    }
+                  }}
+                  className={imovelFormErrors.includes('rua') ? 'input-error' : ''}
                   placeholder="Nome da rua e lote"
                   required
                 />
@@ -2628,7 +2810,11 @@ function App() {
                   onChange={(e) => {
                     setVCidade(e.target.value);
                     fetchConcelhos(e.target.value);
+                    if (imovelFormErrors.includes('cidade')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'cidade'));
+                    }
                   }}
+                  className={imovelFormErrors.includes('cidade') ? 'input-error' : ''}
                   placeholder="Ex: Beja"
                   required
                 />
@@ -2646,7 +2832,11 @@ function App() {
                   onChange={(e) => {
                     setVFreguesia(e.target.value);
                     fetchFreguesias(e.target.value, vCidade);
+                    if (imovelFormErrors.includes('freguesia')) {
+                      setImovelFormErrors(imovelFormErrors.filter(err => err !== 'freguesia'));
+                    }
                   }}
+                  className={imovelFormErrors.includes('freguesia') ? 'input-error' : ''}
                   placeholder="Ex: Salvador"
                   required
                 />
@@ -2723,7 +2913,13 @@ function App() {
                 <input 
                   type="text" 
                   value={cNome}
-                  onChange={(e) => setCNome(e.target.value)}
+                  onChange={(e) => {
+                    setCNome(e.target.value);
+                    if (compradorFormErrors.includes('nome')) {
+                      setCompradorFormErrors(compradorFormErrors.filter(err => err !== 'nome'));
+                    }
+                  }}
+                  className={compradorFormErrors.includes('nome') ? 'input-error' : ''}
                   placeholder="Ex: Carolina Pais"
                   required
                 />
@@ -2734,7 +2930,13 @@ function App() {
                 <input 
                   type="text" 
                   value={cContacto}
-                  onChange={(e) => setCContacto(e.target.value)}
+                  onChange={(e) => {
+                    setCContacto(e.target.value);
+                    if (compradorFormErrors.includes('contacto')) {
+                      setCompradorFormErrors(compradorFormErrors.filter(err => err !== 'contacto'));
+                    }
+                  }}
+                  className={compradorFormErrors.includes('contacto') ? 'input-error' : ''}
                   placeholder="Ex: 934567890"
                   required
                 />
@@ -2745,7 +2947,13 @@ function App() {
                 <input 
                   type="number" 
                   value={cOrcamento}
-                  onChange={(e) => setCOrcamento(e.target.value)}
+                  onChange={(e) => {
+                    setCOrcamento(e.target.value);
+                    if (compradorFormErrors.includes('orcamento')) {
+                      setCompradorFormErrors(compradorFormErrors.filter(err => err !== 'orcamento'));
+                    }
+                  }}
+                  className={compradorFormErrors.includes('orcamento') ? 'input-error' : ''}
                   placeholder="Ex: 320000"
                   required
                 />
@@ -2770,8 +2978,17 @@ function App() {
               </div>
 
               <div className="form-group form-group-full">
-                <label>Tipo de Propriedade Pretendida* (Múltiplo)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                <label style={{ color: compradorFormErrors.includes('tiposImovel') ? 'var(--urgency-alta)' : '' }}>Tipo de Propriedade Pretendida* (Múltiplo)</label>
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '8px', 
+                  marginTop: '4px',
+                  padding: '6px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: compradorFormErrors.includes('tiposImovel') ? '1px solid var(--urgency-alta)' : '1px solid transparent',
+                  backgroundColor: compradorFormErrors.includes('tiposImovel') ? 'rgba(225, 29, 72, 0.02)' : 'transparent'
+                }}>
                   {tiposImovelDisponiveis.map(tipo => (
                     <div 
                       key={tipo}
@@ -2793,8 +3010,17 @@ function App() {
               </div>
 
               <div className="form-group form-group-full">
-                <label>Tipologias Aceitáveis* (Múltiplo)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                <label style={{ color: compradorFormErrors.includes('tipologias') ? 'var(--urgency-alta)' : '' }}>Tipologias Aceitáveis* (Múltiplo)</label>
+                <div style={{ 
+                  display: 'flex', 
+                  flexWrap: 'wrap', 
+                  gap: '8px', 
+                  marginTop: '4px',
+                  padding: '6px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: compradorFormErrors.includes('tipologias') ? '1px solid var(--urgency-alta)' : '1px solid transparent',
+                  backgroundColor: compradorFormErrors.includes('tipologias') ? 'rgba(225, 29, 72, 0.02)' : 'transparent'
+                }}>
                   {tipologiasDisponiveis.map(tip => (
                     <div 
                       key={tip}
@@ -2816,7 +3042,7 @@ function App() {
               </div>
 
               <div className="form-group form-group-full">
-                <label>Zonas Geográficas Pretendidas*</label>
+                <label style={{ color: compradorFormErrors.includes('zonas') ? 'var(--urgency-alta)' : '' }}>Zonas Geográficas Pretendidas*</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input 
                     type="text" 
@@ -2826,6 +3052,7 @@ function App() {
                       setCZonaInput(e.target.value);
                       fetchConcelhos(e.target.value);
                     }}
+                    className={compradorFormErrors.includes('zonas') ? 'input-error' : ''}
                     placeholder="Escreve e clica em (+)"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -2853,6 +3080,11 @@ function App() {
                     </span>
                   ))}
                 </div>
+                {compradorFormErrors.includes('zonas') && (
+                  <span style={{ fontSize: '0.725rem', color: 'var(--urgency-alta)', marginTop: '4px', display: 'block' }}>
+                    Deves introduzir um local e clicar no botão (+) para o associar.
+                  </span>
+                )}
               </div>
 
               <div className="form-group form-group-full" style={{ borderTop: '1px solid var(--border-color)', padding: '0.85rem 0' }}>
@@ -2920,13 +3152,16 @@ function App() {
         </div>
       )}
 
-      {/* MODAL 3: AGENDAR NOVA ATIVIDADE */}
+      {/* MODAL 3: AGENDAR NOVA ATIVIDADE / EDITAR */}
       {isAtividadeModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content-card">
             <div className="modal-header">
-              <h3 className="modal-title">Agendar Nova Atividade</h3>
-              <button className="modal-close-btn" onClick={() => setIsAtividadeModalOpen(false)}>
+              <h3 className="modal-title">{editingAtividadeId ? 'Editar Atividade Agendada' : 'Agendar Nova Atividade'}</h3>
+              <button className="modal-close-btn" onClick={() => {
+                setEditingAtividadeId(null);
+                setIsAtividadeModalOpen(false);
+              }}>
                 <X size={20} />
               </button>
             </div>
@@ -3011,8 +3246,11 @@ function App() {
               </div>
 
               <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsAtividadeModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Agendar</button>
+                <button type="button" className="btn btn-secondary" onClick={() => {
+                  setEditingAtividadeId(null);
+                  setIsAtividadeModalOpen(false);
+                }}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">{editingAtividadeId ? 'Gravar Alterações' : 'Agendar'}</button>
               </div>
 
             </form>
@@ -3221,6 +3459,100 @@ function App() {
         </div>
       )}
 
+      {/* MODAL 6: DETALHES COMPLETOS DA CORRESPONDÊNCIA (MATCH) */}
+      {selectedMatchDetail && (
+        <div className="modal-overlay">
+          <div className="modal-content-card" style={{ maxWidth: '650px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Detalhe da Correspondência ({selectedMatchDetail.match_score}%)</h3>
+              <button className="modal-close-btn" onClick={() => setSelectedMatchDetail(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: window.innerWidth <= 900 ? '80px' : '1.5rem' }}>
+              
+              {/* Dados do Comprador */}
+              <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-app)' }}>
+                <h4 style={{ fontWeight: 700, color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Users size={18} />
+                  <span>Comprador (Quem procura)</span>
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr', gap: '8px', fontSize: '0.85rem' }}>
+                  <div><strong>Nome:</strong> {selectedMatchDetail.comprador_nome}</div>
+                  <div><strong>Contacto:</strong> {compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.comprador_contacto || 'Não disponível'}</div>
+                  <div><strong>Orçamento Máx:</strong> {formatCurrency(compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.orcamento_maximo || 0)}</div>
+                  <div><strong>Urgência:</strong> {selectedMatchDetail.comprador_urgencia}</div>
+                  <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}>
+                    <strong>Zonas Pretendidas:</strong> {compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.zonas_pretendidas.join(', ') || 'Nenhuma'}
+                  </div>
+                  <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}>
+                    <strong>Observações do Cliente:</strong> {compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.observacoes || 'Sem notas de perfil.'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Dados do Imóvel & Proprietário */}
+              <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-app)' }}>
+                <h4 style={{ fontWeight: 700, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Home size={18} />
+                  <span>Imóvel Disponível (Vendedor)</span>
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr', gap: '8px', fontSize: '0.85rem' }}>
+                  <div><strong>Proprietário (Dono):</strong> {selectedMatchDetail.proprietario_nome}</div>
+                  <div><strong>Contacto do Dono:</strong> {vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.proprietario_contacto || 'Não disponível'}</div>
+                  <div><strong>Tipo de Imóvel:</strong> {vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tipo_imovel} ({selectedMatchDetail.tipologia})</div>
+                  <div><strong>Preço Anunciado:</strong> {formatCurrency(selectedMatchDetail.preco_objetivo)}</div>
+                  <div><strong>Preço Mín. Aceitável:</strong> {formatCurrency(selectedMatchDetail.preco_minimo)}</div>
+                  <div><strong>Área Útil:</strong> {vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.area_m2 || 0} m²</div>
+                  <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}><strong>Morada / Localização:</strong> {selectedMatchDetail.freguesia}, {selectedMatchDetail.cidade}</div>
+                  <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}>
+                    <strong>Características:</strong> {
+                      [
+                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_garagem && 'Garagem',
+                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_elevador && 'Elevador',
+                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_quintal && 'Espaço Exterior (Quintal)',
+                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_arrecadacao && 'Arrecadação'
+                      ].filter(Boolean).join(', ') || 'Nenhuma'
+                    }
+                  </div>
+                </div>
+              </div>
+
+              {/* Notas de Acompanhamento */}
+              <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                <h4 style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Clock size={18} />
+                  <span>Estado do Negócio</span>
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <strong>Estado CRM:</strong> 
+                    <span className="badge" style={{
+                      border: '1px solid',
+                      backgroundColor: selectedMatchDetail.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : selectedMatchDetail.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
+                      color: selectedMatchDetail.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : selectedMatchDetail.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
+                    }}>
+                      {selectedMatchDetail.estado_match}
+                    </span>
+                  </div>
+                  <div>
+                    <strong>Notas da Negociação:</strong>
+                    <p style={{ marginTop: '4px', padding: '8px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', fontStyle: 'italic', borderLeft: '3px solid var(--border-color)', margin: 0 }}>
+                      {selectedMatchDetail.notas_match || 'Sem observações de acompanhamento registadas.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                <button className="btn btn-secondary" onClick={() => setSelectedMatchDetail(null)}>Fechar</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -3233,9 +3565,10 @@ interface KanbanCardProps {
   onStatusChange: (compradorId: string, imovelId: string, estado: string, notas: string) => Promise<void>;
   onToggleContacto: (compradorId: string, foiContactado: boolean) => Promise<void>;
   onEditComprador: (comp: Comprador) => void;
+  onSelectMatchDetail: (match: Match) => void;
 }
 
-function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleContacto, onEditComprador }: KanbanCardProps) {
+function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleContacto, onEditComprador, onSelectMatchDetail }: KanbanCardProps) {
   const compradorDetalhe = compradores.find(c => c.id === match.comprador_id);
   const imovelDetalhe = vendedores.find(v => v.id === match.imovel_id);
   
@@ -3294,12 +3627,12 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
         <span className="card-budget">{formatCurrency(match.preco_objetivo)}</span>
       </div>
 
-      <div className="card-interested-box">
+      <div className="card-interested-box" onClick={() => onSelectMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do imóvel e proprietário">
         <div className="interested-thumbnail">
           <Building size={18} />
         </div>
         <div className="interested-details">
-          <span className="interested-lbl">Interessado em</span>
+          <span className="interested-lbl">Interessado em (Ver Detalhes)</span>
           <span className="interested-name">{imovelDetalhe?.tipo_imovel || 'Propriedade'} ({match.tipologia})</span>
           <span className="interested-location">
             <MapPin size={10} style={{ display: 'inline', marginRight: '2px' }} />
