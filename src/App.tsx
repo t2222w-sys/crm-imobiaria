@@ -1280,7 +1280,7 @@ function App() {
 
           {/* TAB 5: CALENDÁRIO */}
           {activeMenu === 'calendario' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '2rem', alignItems: 'start' }}>
+            <div className="calendar-wrapper">
               <div className="calendar-main-card">
                 <div className="calendar-header-nav">
                   <button onClick={prevMonth} className="btn-quick-action" style={{ backgroundColor: 'var(--bg-input)' }}>
