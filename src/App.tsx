@@ -213,6 +213,7 @@ function App() {
   const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   // Estados de Edição
   const [editingImovelId, setEditingImovelId] = useState<string | null>(null);
@@ -366,6 +367,7 @@ function App() {
 
   // Fetch
   const fetchData = async () => {
+    setDbError(null);
     try {
       const { data: vData, error: vErr } = await supabase
         .from('vendedores_imoveis')
@@ -401,6 +403,7 @@ function App() {
 
     } catch (err: any) {
       showToast('Erro ao obter dados: ' + err.message, 'error');
+      setDbError(err.message || String(err));
     }
   };
 
@@ -1361,6 +1364,24 @@ function App() {
 
         {/* Painel Central com Scroll */}
         <section className="view-panel">
+          {dbError && (
+            <div style={{
+              margin: '0 0 1.5rem 0',
+              padding: '1rem',
+              backgroundColor: 'rgba(225, 29, 72, 0.1)',
+              border: '1px solid var(--urgency-alta)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--urgency-alta)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '0.9rem',
+              fontWeight: 600
+            }}>
+              <AlertTriangle size={18} />
+              <span>Erro de Ligação à Base de Dados: {dbError}</span>
+            </div>
+          )}
           
           {/* TAB 1: DASHBOARD */}
           {activeMenu === 'dashboard' && (
