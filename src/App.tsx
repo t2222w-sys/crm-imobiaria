@@ -1438,92 +1438,119 @@ function App() {
 
           {/* TAB 2: CRM KANBAN */}
           {activeMenu === 'kanban' && (
-            <div className="kanban-board">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
+              {allMatches.length === 0 && (
+                <div style={{
+                  padding: '1.25rem',
+                  backgroundColor: 'rgba(59, 130, 246, 0.07)',
+                  border: '1px dashed rgba(59, 130, 246, 0.3)',
+                  borderRadius: 'var(--radius-lg)',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.85rem',
+                  lineHeight: '1.5',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  boxShadow: 'var(--shadow-premium)'
+                }}>
+                  <AlertTriangle size={20} style={{ color: 'var(--accent-blue)', flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <strong>💡 Info: Quadro Kanban sem cruzamentos (Matches) ativos.</strong><br />
+                    O quadro CRM exibe apenas os **Matches** (combinações de compra e venda compatíveis em termos de preço, zona e tipologia). 
+                    As suas leads de compradores e propriedades registadas **não foram eliminadas** e continuam totalmente seguras. 
+                    Pode visualizá-las e geri-las clicando em <strong>Imóveis</strong> e <strong>Compradores</strong> no menu esquerdo. 
+                    Se registar um imóvel com preço e tipologia correspondentes à procura de um comprador (ou vice-versa), a oportunidade de negócio aparecerá aqui automaticamente!
+                  </div>
+                </div>
+              )}
               
-              <div className="kanban-column">
-                <div className="column-header">
-                  <div className="column-title-box">
-                    <span className="column-dot azul"></span>
-                    <span className="column-title">Novas Leads</span>
+              <div className="kanban-board">
+                
+                <div className="kanban-column">
+                  <div className="column-header">
+                    <div className="column-title-box">
+                      <span className="column-dot azul"></span>
+                      <span className="column-title">Novas Leads</span>
+                    </div>
+                    <span className="column-count">{getColMatches('Pendente').length}</span>
                   </div>
-                  <span className="column-count">{getColMatches('Pendente').length}</span>
+                  {getColMatches('Pendente').map((match, idx) => (
+                    <KanbanCard 
+                      key={idx} 
+                      match={match} 
+                      compradores={compradores}
+                      vendedores={vendedores}
+                      onStatusChange={handleUpdateInteracao}
+                      onToggleContacto={handleToggleContactoRapido}
+                      onEditComprador={startEditComprador}
+                    />
+                  ))}
                 </div>
-                {getColMatches('Pendente').map((match, idx) => (
-                  <KanbanCard 
-                    key={idx} 
-                    match={match} 
-                    compradores={compradores}
-                    vendedores={vendedores}
-                    onStatusChange={handleUpdateInteracao}
-                    onToggleContacto={handleToggleContactoRapido}
-                    onEditComprador={startEditComprador}
-                  />
-                ))}
-              </div>
 
-              <div className="kanban-column">
-                <div className="column-header">
-                  <div className="column-title-box">
-                    <span className="column-dot amarelo"></span>
-                    <span className="column-title">Em Contacto</span>
+                <div className="kanban-column">
+                  <div className="column-header">
+                    <div className="column-title-box">
+                      <span className="column-dot amarelo"></span>
+                      <span className="column-title">Em Contacto</span>
+                    </div>
+                    <span className="column-count">{getColMatches('Visita Agendada').length}</span>
                   </div>
-                  <span className="column-count">{getColMatches('Visita Agendada').length}</span>
+                  {getColMatches('Visita Agendada').map((match, idx) => (
+                    <KanbanCard 
+                      key={idx} 
+                      match={match} 
+                      compradores={compradores}
+                      vendedores={vendedores}
+                      onStatusChange={handleUpdateInteracao}
+                      onToggleContacto={handleToggleContactoRapido}
+                      onEditComprador={startEditComprador}
+                    />
+                  ))}
                 </div>
-                {getColMatches('Visita Agendada').map((match, idx) => (
-                  <KanbanCard 
-                    key={idx} 
-                    match={match} 
-                    compradores={compradores}
-                    vendedores={vendedores}
-                    onStatusChange={handleUpdateInteracao}
-                    onToggleContacto={handleToggleContactoRapido}
-                    onEditComprador={startEditComprador}
-                  />
-                ))}
-              </div>
 
-              <div className="kanban-column">
-                <div className="column-header">
-                  <div className="column-title-box">
-                    <span className="column-dot roxo"></span>
-                    <span className="column-title">Proposta</span>
+                <div className="kanban-column">
+                  <div className="column-header">
+                    <div className="column-title-box">
+                      <span className="column-dot roxo"></span>
+                      <span className="column-title">Proposta</span>
+                    </div>
+                    <span className="column-count">{getColMatches('Proposta Apresentada').length}</span>
                   </div>
-                  <span className="column-count">{getColMatches('Proposta Apresentada').length}</span>
+                  {getColMatches('Proposta Apresentada').map((match, idx) => (
+                    <KanbanCard 
+                      key={idx} 
+                      match={match} 
+                      compradores={compradores}
+                      vendedores={vendedores}
+                      onStatusChange={handleUpdateInteracao}
+                      onToggleContacto={handleToggleContactoRapido}
+                      onEditComprador={startEditComprador}
+                    />
+                  ))}
                 </div>
-                {getColMatches('Proposta Apresentada').map((match, idx) => (
-                  <KanbanCard 
-                    key={idx} 
-                    match={match} 
-                    compradores={compradores}
-                    vendedores={vendedores}
-                    onStatusChange={handleUpdateInteracao}
-                    onToggleContacto={handleToggleContactoRapido}
-                    onEditComprador={startEditComprador}
-                  />
-                ))}
-              </div>
 
-              <div className="kanban-column">
-                <div className="column-header">
-                  <div className="column-title-box">
-                    <span className="column-dot verde"></span>
-                    <span className="column-title">Negócio Fechado</span>
+                <div className="kanban-column">
+                  <div className="column-header">
+                    <div className="column-title-box">
+                      <span className="column-dot verde"></span>
+                      <span className="column-title">Negócio Fechado</span>
+                    </div>
+                    <span className="column-count">{getColMatches('Negócio Fechado').length}</span>
                   </div>
-                  <span className="column-count">{getColMatches('Negócio Fechado').length}</span>
+                  {getColMatches('Negócio Fechado').map((match, idx) => (
+                    <KanbanCard 
+                      key={idx} 
+                      match={match} 
+                      compradores={compradores}
+                      vendedores={vendedores}
+                      onStatusChange={handleUpdateInteracao}
+                      onToggleContacto={handleToggleContactoRapido}
+                      onEditComprador={startEditComprador}
+                    />
+                  ))}
                 </div>
-                {getColMatches('Negócio Fechado').map((match, idx) => (
-                  <KanbanCard 
-                    key={idx} 
-                    match={match} 
-                    compradores={compradores}
-                    vendedores={vendedores}
-                    onStatusChange={handleUpdateInteracao}
-                    onToggleContacto={handleToggleContactoRapido}
-                    onEditComprador={startEditComprador}
-                  />
-                ))}
-              </div>
 
+              </div>
             </div>
           )}
 
@@ -2757,17 +2784,33 @@ function App() {
       {/* --- MODAL 4: SIMULAÇÃO DE SELEÇÃO DE CONTACTOS --- */}
       {isSimulatedContactsModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content-card" style={{ maxWidth: '400px' }}>
+          <div className="modal-content-card" style={{ maxWidth: '420px' }}>
             <div className="modal-header">
-              <h3 className="modal-title">Escolher do Telemóvel</h3>
+              <h3 className="modal-title">Simulação: Contactos do Telemóvel</h3>
               <button className="modal-close-btn" onClick={() => setIsSimulatedContactsModalOpen(false)}>
                 <X size={20} />
               </button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                A Contact Picker API só está ativa em telemóveis compatíveis (Chrome Android/Safari iOS). Escolhe um dos teus contactos para simular:
+              
+              <div style={{
+                padding: '0.85rem',
+                backgroundColor: 'rgba(217, 119, 6, 0.08)',
+                border: '1px solid rgba(217, 119, 6, 0.2)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-secondary)',
+                fontSize: '0.8rem',
+                lineHeight: '1.4'
+              }}>
+                <strong>⚠️ Informação de Permissão do Dispositivo:</strong><br />
+                O navegador do seu telemóvel não forneceu acesso direto aos seus contactos reais (ou a permissão foi rejeitada). 
+                Exibimos este <strong>seletor simulado modelo</strong> com contactos de demonstração para poder testar o fluxo de CRM.
+              </div>
+
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
+                Selecione um dos contactos modelo de teste para continuar:
               </p>
+              
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {contactosSimulados.map((c, idx) => (
                   <div 
