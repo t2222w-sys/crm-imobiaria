@@ -14,7 +14,15 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Edit2
+  Edit2,
+  Mail,
+  FolderKanban,
+  LayoutDashboard,
+  Settings,
+  MapPin,
+  Building,
+  Heart,
+  TrendingUp
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL atualizado
@@ -39,7 +47,7 @@ interface Imovel {
   urgencia: 'Alta' | 'Media' | 'Baixa';
   observacoes?: string;
   created_at: string;
-  updated_at: string; // Novo
+  updated_at: string;
 }
 
 interface Comprador {
@@ -55,10 +63,10 @@ interface Comprador {
   preferencia_espaco_exterior: boolean;
   urgencia: 'Alta' | 'Media' | 'Baixa';
   observacoes?: string;
-  foi_contactado: boolean; // Novo
-  data_contacto?: string | null; // Novo
+  foi_contactado: boolean;
+  data_contacto?: string | null;
   created_at: string;
-  updated_at: string; // Novo
+  updated_at: string;
 }
 
 interface Match {
@@ -104,29 +112,29 @@ function App() {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        backgroundColor: '#080c14',
-        color: '#f8fafc',
+        backgroundColor: '#f8fafc',
+        color: '#0f172a',
         fontFamily: 'sans-serif',
         padding: '2rem',
         textAlign: 'center'
       }}>
         <div style={{
-          backgroundColor: '#0f172a',
+          backgroundColor: '#ffffff',
           border: '1px solid rgba(239, 68, 68, 0.3)',
           padding: '2.5rem',
           borderRadius: '12px',
           maxWidth: '500px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center'
         }}>
           <AlertTriangle size={48} style={{ color: '#ef4444', marginBottom: '1rem' }} />
-          <h2 style={{ marginBottom: '1rem', fontFamily: 'Outfit, sans-serif' }}>Configuração em Falta</h2>
-          <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+          <h2 style={{ marginBottom: '1rem', fontFamily: 'Outfit, sans-serif', fontWeight: 700 }}>Configuração em Falta</h2>
+          <p style={{ color: '#475569', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
             A aplicação não conseguiu ligar ao Supabase porque as variáveis de ambiente necessárias não foram encontradas.
           </p>
-          <div style={{ textAlign: 'left', backgroundColor: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '6px', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '1.5rem', width: '100%' }}>
+          <div style={{ textAlign: 'left', backgroundColor: '#f1f5f9', padding: '1rem', borderRadius: '6px', fontSize: '0.85rem', color: '#0f172a', marginBottom: '1.5rem', width: '100%' }}>
             <strong>Variáveis necessárias nas definições do Vercel:</strong>
             <ul style={{ marginLeft: '1.25rem', marginTop: '0.5rem' }}>
               <li><code>VITE_SUPABASE_URL</code></li>
@@ -141,21 +149,20 @@ function App() {
     );
   }
 
-  // Tabs e Estados Globais
-  const [activeTab, setActiveTab] = useState<'vendedores' | 'compradores'>('vendedores');
-  const [activeMainTab, setActiveMainTab] = useState<'matching' | 'calendario'>('matching'); // NOVO
-  
+  // Navegação da Sidebar (SaaS Style)
+  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'definicoes'>('kanban');
+
+  // Estados dos Modais
+  const [isImovelModalOpen, setIsImovelModalOpen] = useState(false);
+  const [isCompradorModalOpen, setIsCompradorModalOpen] = useState(false);
+
+  // Dados da Base de Dados
   const [vendedores, setVendedores] = useState<Imovel[]>([]);
   const [compradores, setCompradores] = useState<Comprador[]>([]);
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [selectedComprador, setSelectedComprador] = useState<Comprador | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Estados locais para a edição de notas por cada Match (key: compradorId_imovelId)
-  const [editingNotas, setEditingNotas] = useState<{ [matchKey: string]: string }>({});
-
-  // Estados de Edição de Registos (Modo de Edição)
+  // Estados de Edição de Registos
   const [editingImovelId, setEditingImovelId] = useState<string | null>(null);
   const [editingCompradorId, setEditingCompradorId] = useState<string | null>(null);
 
@@ -193,18 +200,17 @@ function App() {
   const [cEspacoExt, setCEspacoExt] = useState(false);
   const [cUrgencia, setCUrgencia] = useState<'Alta' | 'Media' | 'Baixa'>('Media');
   const [cObs, setCObs] = useState('');
-  const [cFoiContactado, setCFoiContactado] = useState(false); // Novo
-  const [cDataContacto, setCDataContacto] = useState(''); // Novo
+  const [cFoiContactado, setCFoiContactado] = useState(false);
+  const [cDataContacto, setCDataContacto] = useState('');
 
-  // Autocomplete Sugestões (Supabase)
+  // Autocomplete Sugestões
   const [concelhoSugestoes, setConcelhoSugestoes] = useState<string[]>([]);
   const [freguesiaSugestoes, setFreguesiaSugestoes] = useState<string[]>([]);
 
-  // Calendário de Navegação
+  // Calendário
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [selectedDay, setSelectedDay] = useState<Date>(new Date());
 
-  // Listas de Opções Estáticas para a Interface
   const tipologiasDisponiveis = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5+'];
   const tiposImovelDisponiveis = [
     'Apartamento',
@@ -218,15 +224,6 @@ function App() {
     fetchData();
   }, []);
 
-  // Quando o comprador selecionado muda, carregamos os matches dele
-  useEffect(() => {
-    if (selectedComprador) {
-      fetchMatches(selectedComprador.id);
-    } else {
-      setMatches([]);
-    }
-  }, [selectedComprador, vendedores]);
-
   // Toasts Helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now();
@@ -238,7 +235,6 @@ function App() {
 
   // Buscar dados base do Supabase
   const fetchData = async () => {
-    setLoading(true);
     try {
       const { data: vData, error: vErr } = await supabase
         .from('vendedores_imoveis')
@@ -256,30 +252,16 @@ function App() {
       if (cErr) throw cErr;
       setCompradores(cData || []);
 
-      if (cData && cData.length > 0 && !selectedComprador) {
-        setSelectedComprador(cData[0]);
-      }
-    } catch (err: any) {
-      showToast('Erro ao obter dados: ' + err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Buscar matches de um comprador específico da View de matching
-  const fetchMatches = async (compradorId: string) => {
-    try {
-      const { data, error } = await supabase
+      // Buscar todos os matches possíveis de todos os compradores
+      const { data: mData, error: mErr } = await supabase
         .from('view_matches_compradores_imoveis')
         .select('*')
-        .eq('comprador_id', compradorId)
         .order('match_score', { ascending: false });
 
-      if (error) throw error;
-      setMatches(data || []);
-      setEditingNotas({});
+      if (mErr) throw mErr;
+      setAllMatches(mData || []);
     } catch (err: any) {
-      console.error('Erro ao ler matches:', err.message);
+      showToast('Erro ao obter dados: ' + err.message, 'error');
     }
   };
 
@@ -331,7 +313,7 @@ function App() {
     }
   };
 
-  // Tratar submissão de Novo Imóvel (ou Edição de Imóvel)
+  // Tratar submissão de Novo Imóvel (ou Edição)
   const handleAddImovel = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -367,12 +349,11 @@ function App() {
       tem_arrecadacao: vArrecadacao,
       urgencia: vUrgencia,
       observacoes: vObs || null,
-      updated_at: new Date().toISOString() // Grava data de atualização
+      updated_at: new Date().toISOString()
     };
 
     try {
       if (editingImovelId) {
-        // MODO EDIÇÃO
         const { error } = await supabase
           .from('vendedores_imoveis')
           .update(imovelPayload)
@@ -382,17 +363,15 @@ function App() {
         showToast('Imóvel atualizado com sucesso!');
         setEditingImovelId(null);
       } else {
-        // MODO INSERÇÃO
         const { error } = await supabase
           .from('vendedores_imoveis')
-          .insert([imovelPayload])
-          .select();
+          .insert([imovelPayload]);
 
         if (error) throw error;
         showToast('Imóvel adicionado com sucesso!');
       }
       
-      // Limpar formulário
+      // Limpar formulário e fechar modal
       setVNome('');
       setVContacto('');
       setVTipologia('T2');
@@ -409,6 +388,7 @@ function App() {
       setVQuintal(false);
       setVArrecadacao(false);
       setVObs('');
+      setIsImovelModalOpen(false);
       
       fetchData();
     } catch (err: any) {
@@ -416,7 +396,7 @@ function App() {
     }
   };
 
-  // Tratar submissão de Nova Lead (ou Edição de Comprador)
+  // Tratar submissão de Novo Comprador (ou Edição)
   const handleAddComprador = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -444,7 +424,6 @@ function App() {
 
     try {
       if (editingCompradorId) {
-        // MODO EDIÇÃO
         const { error } = await supabase
           .from('compradores_leads')
           .update(leadPayload)
@@ -454,17 +433,15 @@ function App() {
         showToast('Lead de comprador atualizada!');
         setEditingCompradorId(null);
       } else {
-        // MODO INSERÇÃO
         const { error } = await supabase
           .from('compradores_leads')
-          .insert([leadPayload])
-          .select();
+          .insert([leadPayload]);
 
         if (error) throw error;
         showToast('Lead de comprador registada!');
       }
 
-      // Limpar formulário
+      // Limpar formulário e fechar modal
       setCNome('');
       setCContacto('');
       setCOrcamento('');
@@ -478,6 +455,7 @@ function App() {
       setCObs('');
       setCFoiContactado(false);
       setCDataContacto('');
+      setIsCompradorModalOpen(false);
 
       fetchData();
     } catch (err: any) {
@@ -487,7 +465,6 @@ function App() {
 
   // Ativar modo de edição para Imóvel
   const startEditImovel = (imovel: Imovel) => {
-    setActiveTab('vendedores');
     setEditingImovelId(imovel.id);
     
     setVNome(imovel.proprietario_nome);
@@ -508,11 +485,12 @@ function App() {
     setVArrecadacao(imovel.tem_arrecadacao);
     setVUrgencia(imovel.urgencia);
     setVObs(imovel.observacoes || '');
+
+    setIsImovelModalOpen(true);
   };
 
   // Ativar modo de edição para Comprador
   const startEditComprador = (comprador: Comprador) => {
-    setActiveTab('compradores');
     setEditingCompradorId(comprador.id);
 
     setCNome(comprador.comprador_nome);
@@ -529,14 +507,15 @@ function App() {
     setCFoiContactado(comprador.foi_contactado);
     
     if (comprador.data_contacto) {
-      // Converter ISO string para formato datetime-local (YYYY-MM-DDTHH:MM)
       const d = new Date(comprador.data_contacto);
-      const tzOffset = d.getTimezoneOffset() * 60000; // offset em ms
+      const tzOffset = d.getTimezoneOffset() * 60000;
       const localISOTime = (new Date(d.getTime() - tzOffset)).toISOString().slice(0, 16);
       setCDataContacto(localISOTime);
     } else {
       setCDataContacto('');
     }
+
+    setIsCompradorModalOpen(true);
   };
 
   // Atualizar ou inserir estado da interação/visita
@@ -549,22 +528,23 @@ function App() {
             comprador_id: compradorId,
             imovel_id: imovelId,
             estado: estado,
-            notas: notas,
+            notes_match: notas, // Mapeado para notas_match
+            notas: notas, // Mapeado para notas por segurança
             updated_at: new Date().toISOString()
           },
           { onConflict: 'comprador_id,imovel_id' }
         );
 
       if (error) throw error;
-      showToast('Interação atualizada!');
-      fetchMatches(compradorId);
+      showToast('Estado de venda atualizado!');
+      fetchData();
     } catch (err: any) {
-      showToast('Erro ao atualizar interação: ' + err.message, 'error');
+      showToast('Erro ao atualizar estado: ' + err.message, 'error');
     }
   };
 
-  // Atualizar contacto de um comprador de forma rápida (botão no match card)
-  const handleToggleContactoRapido = async (comprador: Comprador, foiContactado: boolean) => {
+  // Contacto rápido
+  const handleToggleContactoRapido = async (compradorId: string, foiContactado: boolean) => {
     try {
       const dataStr = foiContactado ? new Date().toISOString() : null;
       const { error } = await supabase
@@ -574,67 +554,42 @@ function App() {
           data_contacto: dataStr,
           updated_at: new Date().toISOString()
         })
-        .eq('id', comprador.id);
+        .eq('id', compradorId);
 
       if (error) throw error;
-      showToast(foiContactado ? 'Cliente marcado como contactado!' : 'Contacto removido.');
-      
-      // Atualiza o comprador selecionado na UI
-      setSelectedComprador({
-        ...comprador,
-        foi_contactado: foiContactado,
-        data_contacto: dataStr
-      });
+      showToast(foiContactado ? 'Marcado como contactado!' : 'Contacto limpo.');
       fetchData();
     } catch (err: any) {
       showToast('Erro ao atualizar contacto: ' + err.message, 'error');
     }
   };
 
-  // Apagar Imóvel
-  const handleDeleteImovel = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm('Remover este imóvel permanentemente?')) return;
-
+  // Apagar registos
+  const handleDeleteImovel = async (id: string) => {
+    if (!window.confirm('Eliminar este imóvel permanentemente?')) return;
     try {
-      const { error } = await supabase
-        .from('vendedores_imoveis')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('vendedores_imoveis').delete().eq('id', id);
       if (error) throw error;
-      showToast('Imóvel removido.');
-      
-      if (editingImovelId === id) setEditingImovelId(null);
+      showToast('Imóvel eliminado.');
       fetchData();
     } catch (err: any) {
-      showToast('Erro ao remover: ' + err.message, 'error');
+      showToast('Erro ao eliminar: ' + err.message, 'error');
     }
   };
 
-  // Apagar Comprador
-  const handleDeleteComprador = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm('Remover este comprador permanentemente?')) return;
-
+  const handleDeleteComprador = async (id: string) => {
+    if (!window.confirm('Eliminar esta lead de comprador permanentemente?')) return;
     try {
-      const { error } = await supabase
-        .from('compradores_leads')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('compradores_leads').delete().eq('id', id);
       if (error) throw error;
-      showToast('Comprador removido.');
-      
-      if (selectedComprador?.id === id) setSelectedComprador(null);
-      if (editingCompradorId === id) setEditingCompradorId(null);
+      showToast('Comprador eliminado.');
       fetchData();
     } catch (err: any) {
-      showToast('Erro ao remover: ' + err.message, 'error');
+      showToast('Erro ao eliminar: ' + err.message, 'error');
     }
   };
 
-  // Adicionar zona pretendida à lista
+  // Auxiliares do form
   const handleAddZona = () => {
     const concelho = cZonaInput.trim();
     if (concelho && !cZonas.includes(concelho)) {
@@ -643,12 +598,10 @@ function App() {
     }
   };
 
-  // Remover zona da lista
   const handleRemoveZona = (zonaToRemove: string) => {
     setCZonas(cZonas.filter(z => z !== zonaToRemove));
   };
 
-  // Toggle de seleção múltipla de tipologias
   const handleToggleTipologia = (tip: string) => {
     if (cTipologias.includes(tip)) {
       if (cTipologias.length > 1) {
@@ -661,7 +614,6 @@ function App() {
     }
   };
 
-  // Toggle de seleção múltipla de tipos de imóvel
   const handleToggleTipoImovel = (tipo: string) => {
     if (cTiposImovel.includes(tipo)) {
       if (cTiposImovel.length > 1) {
@@ -678,63 +630,42 @@ function App() {
     return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
   };
 
-  // Obter cores para as tags de estado do CRM
-  const getEstadoBadgeStyle = (estado: string) => {
-    switch (estado) {
-      case 'Visita Agendada':
-        return { backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)' };
-      case 'Proposta Apresentada':
-        return { backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa', borderColor: 'rgba(139, 92, 246, 0.3)' };
-      case 'Negócio Fechado':
-        return { backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' };
-      case 'Arquivado':
-        return { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' };
-      default:
-        return { backgroundColor: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', borderColor: 'rgba(148, 163, 184, 0.3)' };
-    }
-  };
-
-  // --- LOGICA DE RENDERIZAÇÃO DO CALENDÁRIO DE ATIVIDADES ---
-  
-  // Coletar todos os eventos e agrupá-los por data formatada YYYY-MM-DD
+  // --- CALENDÁRIO ---
   const getCalendarEvents = (): CalendarEvent[] => {
     const events: CalendarEvent[] = [];
 
-    // 1. Registos de Imóveis (criado em)
     vendedores.forEach(v => {
       const d = v.created_at.split('T')[0];
       events.push({
         date: d,
         type: 'imovel',
         title: `Registo de Imóvel`,
-        label: `${v.tipo_imovel} (${v.tipologia}) - Proprietário: ${v.proprietario_nome}`,
-        desc: `Registado por ${formatCurrency(v.preco_objetivo)} em ${v.freguesia}, ${v.cidade}.`,
+        label: `${v.tipo_imovel} (${v.tipologia}) - ${v.proprietario_nome}`,
+        desc: `Preço: ${formatCurrency(v.preco_objetivo)} em ${v.freguesia}, ${v.cidade}.`,
         originalId: v.id
       });
 
-      // Se atualizado posteriormente
       const u = v.updated_at.split('T')[0];
       if (u !== d) {
         events.push({
           date: u,
           type: 'imovel_update',
           title: `Atualização de Imóvel`,
-          label: `${v.tipo_imovel} (${v.tipologia}) - Proprietário: ${v.proprietario_nome}`,
-          desc: `Modificado em ${v.freguesia}.`,
+          label: `${v.tipo_imovel} (${v.tipologia}) - ${v.proprietario_nome}`,
+          desc: `Alterado em ${v.freguesia}.`,
           originalId: v.id
         });
       }
     });
 
-    // 2. Registos de Compradores (criado em)
     compradores.forEach(c => {
       const d = c.created_at.split('T')[0];
       events.push({
         date: d,
         type: 'comprador',
-        title: `Nova Lead de Comprador`,
+        title: `Novo Comprador (Lead)`,
         label: `${c.comprador_nome} - Contacto: ${c.comprador_contacto}`,
-        desc: `Orcamento: ${formatCurrency(c.orcamento_maximo)} para tipologias: ${c.tipologias_pretendidas.join(',')}.`,
+        desc: `Orçamento Máx: ${formatCurrency(c.orcamento_maximo)}.`,
         originalId: c.id
       });
 
@@ -745,12 +676,11 @@ function App() {
           type: 'comprador_update',
           title: `Atualização de Comprador`,
           label: `${c.comprador_nome}`,
-          desc: `Alterações gravadas no perfil do cliente.`,
+          desc: `Dados de requisitos reajustados.`,
           originalId: c.id
         });
       }
 
-      // Contactos de clientes
       if (c.foi_contactado && c.data_contacto) {
         const dc = c.data_contacto.split('T')[0];
         events.push({
@@ -758,20 +688,17 @@ function App() {
           type: 'contacto',
           title: `Contacto com Cliente`,
           label: `${c.comprador_nome}`,
-          desc: `Contacto efetuado com sucesso para fins de qualificação da lead.`,
+          desc: `Contacto efetuado com sucesso.`,
           originalId: c.id
         });
       }
     });
-
-
 
     return events;
   };
 
   const calendarEvents = getCalendarEvents();
 
-  // Mudar de mês
   const prevMonth = () => {
     setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
   };
@@ -780,14 +707,11 @@ function App() {
     setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
   };
 
-  // Renderizar a matriz de dias para o calendário mensal
   const renderCalendarDays = () => {
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
 
-    // Primeiro dia do mês (0 = Domingo, 1 = Segunda, etc.)
     const firstDayIndex = new Date(year, month, 1).getDay();
-    // Ajustar para Segunda-feira ser o primeiro dia (0 = Segunda, ..., 6 = Domingo)
     const startDayOffset = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
 
     const totalDays = new Date(year, month + 1, 0).getDate();
@@ -795,7 +719,6 @@ function App() {
 
     const cells: React.ReactNode[] = [];
 
-    // Preencher dias do mês anterior
     for (let i = startDayOffset - 1; i >= 0; i--) {
       const dayNum = totalDaysPrev - i;
       cells.push(
@@ -805,14 +728,11 @@ function App() {
       );
     }
 
-    // Preencher dias do mês atual
     for (let i = 1; i <= totalDays; i++) {
       const cellDate = new Date(year, month, i);
       const cellDateStr = cellDate.toISOString().split('T')[0];
 
-      // Filtrar eventos deste dia
       const dayEvents = calendarEvents.filter(e => e.date === cellDateStr);
-
       const isToday = new Date().toDateString() === cellDate.toDateString();
       const isSelected = selectedDay.toDateString() === cellDate.toDateString();
 
@@ -823,16 +743,10 @@ function App() {
           onClick={() => setSelectedDay(cellDate)}
         >
           <span className="calendar-day-num">{i}</span>
-          
           <div className="calendar-dots-container">
             {dayEvents.slice(0, 4).map((evt, idx) => (
               <div key={idx} className={`calendar-event-dot dot-${evt.type}`} title={evt.title} />
             ))}
-            {dayEvents.length > 4 && (
-              <span style={{ fontSize: '0.6rem', color: 'var(--accent-gold)', fontWeight: 700 }}>
-                +{dayEvents.length - 4}
-              </span>
-            )}
           </div>
         </div>
       );
@@ -849,11 +763,20 @@ function App() {
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
 
-  const totalMatchesCount = compradores.length > 0 ? matches.length : 0;
+  // Agrupamento do Kanban baseados nas interações ativas (Matches)
+  // Colunas: Pendente, Visita Agendada, Proposta Apresentada, Negócio Fechado
+  const getColMatches = (estado: string) => {
+    return allMatches.filter(m => m.estado_match === estado);
+  };
+
+  // Estatísticas do Dashboard
+  const totalVolumeNegocios = allMatches
+    .filter(m => m.estado_match === 'Negócio Fechado')
+    .reduce((acc, m) => acc + Number(m.preco_objetivo), 0);
 
   return (
     <div className="app-container">
-      {/* Notificações Toasts */}
+      {/* Toasts */}
       <div className="toast-container">
         {toasts.map(toast => (
           <div key={toast.id} className={`toast toast-${toast.type}`}>
@@ -863,955 +786,511 @@ function App() {
         ))}
       </div>
 
-      {/* Cabeçalho Superior */}
-      <header className="app-header">
-        <div className="brand-section">
-          <div>
-            <span className="brand-logo">Imo.</span>
-            <div className="brand-tagline">CRM & Engine de Matching</div>
-          </div>
+      {/* BARRA LATERAL ESQUERDA (SaaS Style) */}
+      <aside className="app-sidebar">
+        <div className="sidebar-profile">
+          <div className="profile-avatar">I</div>
+          <span className="profile-welcome">Bem-vindo!</span>
+          <span className="profile-name">Agente Imo</span>
         </div>
 
-        <div className="stats-grid">
-          <div className="stat-item">
-            <span className="stat-val">{vendedores.length}</span>
-            <span className="stat-label">Imóveis</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-val">{compradores.length}</span>
-            <span className="stat-label">Compradores</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-val" style={{ color: 'var(--accent-gold)' }}>
-              {loading ? '...' : totalMatchesCount}
-            </span>
-            <span className="stat-label">Matches Ativos</span>
-          </div>
-        </div>
-      </header>
+        <nav className="sidebar-menu">
+          <button 
+            className={`menu-item ${activeMenu === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveMenu('dashboard')}
+          >
+            <LayoutDashboard size={18} />
+            <span>Painel Geral</span>
+          </button>
+          
+          <button 
+            className={`menu-item ${activeMenu === 'kanban' ? 'active' : ''}`}
+            onClick={() => setActiveMenu('kanban')}
+          >
+            <FolderKanban size={18} />
+            <span>Quadro Kanban</span>
+          </button>
 
-      {/* Layout Principal do Dashboard */}
-      <main className="dashboard-layout">
+          <button 
+            className={`menu-item ${activeMenu === 'imoveis' ? 'active' : ''}`}
+            onClick={() => setActiveMenu('imoveis')}
+          >
+            <Home size={18} />
+            <span>Imóveis</span>
+          </button>
+
+          <button 
+            className={`menu-item ${activeMenu === 'compradores' ? 'active' : ''}`}
+            onClick={() => setActiveMenu('compradores')}
+          >
+            <Users size={18} />
+            <span>Compradores</span>
+          </button>
+
+          <button 
+            className={`menu-item ${activeMenu === 'calendario' ? 'active' : ''}`}
+            onClick={() => setActiveMenu('calendario')}
+          >
+            <Calendar size={18} />
+            <span>Calendário</span>
+          </button>
+
+          <button 
+            className={`menu-item ${activeMenu === 'definicoes' ? 'active' : ''}`}
+            onClick={() => setActiveMenu('definicoes')}
+          >
+            <Settings size={18} />
+            <span>Definições</span>
+          </button>
+        </nav>
+      </aside>
+
+      {/* ÁREA DE CONTEÚDO PRINCIPAL */}
+      <main className="main-content">
         
-        {/* Coluna de Formulários e Registos (Esquerda/Sidebar) */}
-        <section className="sidebar-column">
-          <nav className="tabs-header">
-            <button 
-              className={`tab-btn ${activeTab === 'vendedores' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('vendedores');
-                setEditingImovelId(null);
-              }}
-            >
-              <Home size={16} />
-              <span>Vendedores (Imóveis)</span>
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'compradores' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('compradores');
-                setEditingCompradorId(null);
-              }}
-            >
-              <Users size={16} />
-              <span>Compradores (Leads)</span>
-            </button>
-          </nav>
-
-          {/* TAB VENDEDORES / IMÓVEIS */}
-          {activeTab === 'vendedores' && (
-            <div className="card">
-              <div className="card-title-container">
-                <h2 className="card-title">
-                  {editingImovelId ? 'Editar Imóvel' : 'Inserir Novo Imóvel'}
-                </h2>
-                <Home size={20} style={{ color: 'var(--accent-gold)' }} />
-              </div>
-
-              <form onSubmit={handleAddImovel} className="form-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div className="form-group">
-                  <label>Proprietário (Nome)*</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: João Silva" 
-                    value={vNome}
-                    onChange={(e) => setVNome(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group-row">
-                  <div className="form-group">
-                    <label>Contacto*</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: 912345678" 
-                      value={vContacto}
-                      onChange={(e) => setVContacto(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Tipo de Imóvel*</label>
-                    <select value={vTipoImovel} onChange={(e) => setVTipoImovel(e.target.value)}>
-                      {tiposImovelDisponiveis.map(tipo => (
-                        <option key={tipo} value={tipo}>{tipo}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group-row">
-                  <div className="form-group">
-                    <label>Preço Objetivo (€)*</label>
-                    <input 
-                      type="number" 
-                      placeholder="Preço anunciado" 
-                      value={vPrecoObj}
-                      onChange={(e) => setVPrecoObj(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Preço Mínimo (€)*</label>
-                    <input 
-                      type="number" 
-                      placeholder="Preço confidencial" 
-                      value={vPrecoMin}
-                      onChange={(e) => setVPrecoMin(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group-row">
-                  <div className="form-group">
-                    <label>Tipologia*</label>
-                    <select value={vTipologia} onChange={(e) => setVTipologia(e.target.value)}>
-                      <option value="T0">T0</option>
-                      <option value="T1">T1</option>
-                      <option value="T2">T2</option>
-                      <option value="T3">T3</option>
-                      <option value="T4">T4</option>
-                      <option value="T5+">T5+</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Área Útil (m²)*</label>
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      placeholder="Ex: 85.5" 
-                      value={vArea}
-                      onChange={(e) => setVArea(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group-row">
-                  <div className="form-group">
-                    <label>Andar / Piso*</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: R/C ou 2º" 
-                      value={vAndar}
-                      onChange={(e) => setVAndar(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Urgência de Venda*</label>
-                    <select value={vUrgencia} onChange={(e) => setVUrgencia(e.target.value as any)}>
-                      <option value="Baixa">🟢 Baixa</option>
-                      <option value="Media">🟡 Média</option>
-                      <option value="Alta">🔴 Alta</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Localização (Rua)*</label>
-                  <input 
-                    type="text" 
-                    placeholder="Nome da rua e número" 
-                    value={vRua}
-                    onChange={(e) => setVRua(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group-row">
-                  <div className="form-group autocomplete-wrapper">
-                    <label>Cidade (Concelho)*</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: Beja" 
-                      value={vCidade}
-                      list="cidades-vendedores"
-                      onChange={(e) => {
-                        setVCidade(e.target.value);
-                        fetchConcelhos(e.target.value);
-                      }}
-                      required
-                    />
-                    <datalist id="cidades-vendedores">
-                      {concelhoSugestoes.map((c, idx) => <option key={idx} value={c} />)}
-                    </datalist>
-                  </div>
-                  <div className="form-group autocomplete-wrapper">
-                    <label>Freguesia*</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: Salvador" 
-                      value={vFreguesia}
-                      list="freguesias-vendedores"
-                      onChange={(e) => {
-                        setVFreguesia(e.target.value);
-                        fetchFreguesias(e.target.value, vCidade);
-                      }}
-                      required
-                    />
-                    <datalist id="freguesias-vendedores">
-                      {freguesiaSugestoes.map((f, idx) => <option key={idx} value={f} />)}
-                    </datalist>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Características e Acessibilidade</label>
-                  <div className="checkbox-group">
-                    <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={vElevador}
-                        onChange={(e) => setVElevador(e.target.checked)}
-                      />
-                      Tem Elevador
-                    </label>
-                    <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={vGaragem}
-                        onChange={(e) => setVGaragem(e.target.checked)}
-                      />
-                      Tem Garagem
-                    </label>
-                    <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={vQuintal}
-                        onChange={(e) => setVQuintal(e.target.checked)}
-                      />
-                      Quintal / Varanda
-                    </label>
-                    <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={vArrecadacao}
-                        onChange={(e) => setVArrecadacao(e.target.checked)}
-                      />
-                      Arrecadação
-                    </label>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Negociação*</label>
-                  <select value={vFlex} onChange={(e) => setVFlex(e.target.value as any)}>
-                    <option value="Baixa">Baixa Flexibilidade</option>
-                    <option value="Media">Média Flexibilidade</option>
-                    <option value="Alta">Alta Flexibilidade</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Observações Adicionais</label>
-                  <textarea 
-                    rows={2} 
-                    placeholder="Notas internas..." 
-                    value={vObs}
-                    onChange={(e) => setVObs(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="submit" className="btn btn-primary" style={{ flexGrow: 1 }}>
-                    <PlusCircle size={18} />
-                    <span>{editingImovelId ? 'Guardar Alterações' : 'Gravar Imóvel'}</span>
-                  </button>
-                  {editingImovelId && (
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        setEditingImovelId(null);
-                        setVNome('');
-                        setVContacto('');
-                        setVPrecoObj('');
-                        setVPrecoMin('');
-                        setVArea('');
-                        setVRua('');
-                        setVCidade('');
-                        setVFreguesia('');
-                        setVObs('');
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* TAB COMPRADORES / LEADS */}
-          {activeTab === 'compradores' && (
-            <div className="card">
-              <div className="card-title-container">
-                <h2 className="card-title">
-                  {editingCompradorId ? 'Editar Lead' : 'Registar Comprador (Lead)'}
-                </h2>
-                <Users size={20} style={{ color: 'var(--accent-gold)' }} />
-              </div>
-
-              <form onSubmit={handleAddComprador} className="form-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div className="form-group">
-                  <label>Comprador (Nome)*</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Maria Antunes" 
-                    value={cNome}
-                    onChange={(e) => setCNome(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Contacto Telefónico*</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: 961234567" 
-                    value={cContacto}
-                    onChange={(e) => setCContacto(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Tipo de Imóvel Pretendido* (Múltiplos)</label>
-                  <div className="chips-container">
-                    {tiposImovelDisponiveis.map(tipo => (
-                      <div 
-                        key={tipo}
-                        className={`chip ${cTiposImovel.includes(tipo) ? 'active' : ''}`}
-                        onClick={() => handleToggleTipoImovel(tipo)}
-                      >
-                        {cTiposImovel.includes(tipo) && <Check size={12} />}
-                        <span>{tipo}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Tipologias Pretendidas* (Múltiplas)</label>
-                  <div className="chips-container">
-                    {tipologiasDisponiveis.map(tip => (
-                      <div 
-                        key={tip}
-                        className={`chip ${cTipologias.includes(tip) ? 'active' : ''}`}
-                        onClick={() => handleToggleTipologia(tip)}
-                      >
-                        {cTipologias.includes(tip) && <Check size={12} />}
-                        <span>{tip}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Orçamento Máximo (€)*</label>
-                  <input 
-                    type="number" 
-                    placeholder="Orçamento total disponível" 
-                    value={cOrcamento}
-                    onChange={(e) => setCOrcamento(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Zonas/Localidades Pretendidas*</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: Beja, Salvador..." 
-                      value={cZonaInput}
-                      list="cidades-compradores"
-                      onChange={(e) => {
-                        setCZonaInput(e.target.value);
-                        fetchConcelhos(e.target.value);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddZona();
-                        }
-                      }}
-                    />
-                    <datalist id="cidades-compradores">
-                      {concelhoSugestoes.map((c, idx) => <option key={idx} value={c} />)}
-                    </datalist>
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary" 
-                      onClick={handleAddZona}
-                      style={{ padding: '0.75rem 1rem' }}
-                    >
-                      <Plus size={18} />
-                    </button>
-                  </div>
-                  <div className="chips-container" style={{ minHeight: '30px' }}>
-                    {cZonas.map(zona => (
-                      <span 
-                        key={zona} 
-                        className="chip active" 
-                        style={{ backgroundColor: 'var(--bg-input)' }}
-                        onClick={() => handleRemoveZona(zona)}
-                      >
-                        <span>{zona}</span>
-                        <X size={12} />
-                      </span>
-                    ))}
-                    {cZonas.length === 0 && (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                        Adicione pelo menos 1 concelho/zona.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* GESTÃO DE CONTACTO DO CLIENTE (Novo) */}
-                <div style={{ 
-                  borderTop: '1px solid var(--border-color)', 
-                  borderBottom: '1px solid var(--border-color)',
-                  padding: '0.85rem 0',
-                  margin: '4px 0',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem'
-                }}>
-                  <label className="checkbox-label" style={{ fontWeight: 600 }}>
-                    <input 
-                      type="checkbox" 
-                      checked={cFoiContactado}
-                      onChange={(e) => setCFoiContactado(e.target.checked)}
-                    />
-                    Já foi contactado?
-                  </label>
-                  {cFoiContactado && (
-                    <div className="form-group" style={{ animation: 'slideIn 0.2s ease' }}>
-                      <label>Data e Hora do Contacto</label>
-                      <input 
-                        type="datetime-local" 
-                        value={cDataContacto}
-                        onChange={(e) => setCDataContacto(e.target.value)}
-                        required={cFoiContactado}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label>Requisitos Rígidos / Preferências</label>
-                  <div className="checkbox-group">
-                    <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={cGaragem}
-                        onChange={(e) => setCGaragem(e.target.checked)}
-                      />
-                      Exige Garagem
-                    </label>
-                    <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={cElevadorRc}
-                        onChange={(e) => setCElevadorRc(e.target.checked)}
-                      />
-                      Acessibilidade (Elevador ou R/C)
-                    </label>
-                    <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={cEspacoExt}
-                        onChange={(e) => setCEspacoExt(e.target.checked)}
-                      />
-                      Varanda / Espaço Exterior
-                    </label>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Urgência de Compra*</label>
-                  <select value={cUrgencia} onChange={(e) => setCUrgencia(e.target.value as any)}>
-                    <option value="Baixa">🟢 Baixa (Procura ativa mas sem pressa)</option>
-                    <option value="Media">🟡 Média (Acompanhamento regular)</option>
-                    <option value="Alta">🔴 Alta (Urgente / Precisa comprar já)</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Notas / Observações</label>
-                  <textarea 
-                    rows={2} 
-                    placeholder="Preferencia especial do cliente..." 
-                    value={cObs}
-                    onChange={(e) => setCObs(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="submit" className="btn btn-primary" style={{ flexGrow: 1 }}>
-                    <PlusCircle size={18} />
-                    <span>{editingCompradorId ? 'Guardar Alterações' : 'Submeter Lead'}</span>
-                  </button>
-                  {editingCompradorId && (
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        setEditingCompradorId(null);
-                        setCNome('');
-                        setCContacto('');
-                        setCOrcamento('');
-                        setCTipologias(['T2']);
-                        setCTiposImovel(['Apartamento']);
-                        setCZonas([]);
-                        setCObs('');
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* LISTA GERAL DE ENTIDADES (RESUMIDA NA SIDEBAR) */}
-          <div className="card">
-            <h3 className="card-title" style={{ fontSize: '1.1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-              {activeTab === 'vendedores' ? 'Lista de Imóveis (' + vendedores.length + ')' : 'Compradores Registados (' + compradores.length + ')'}
-            </h3>
-            
-            <div className="items-list-scroll">
-              {activeTab === 'vendedores' ? (
-                vendedores.length > 0 ? (
-                  vendedores.map(imovel => (
-                    <div key={imovel.id} className="item-list-row" style={{ cursor: 'default' }}>
-                      <div className="item-info-main">
-                        <span className="item-title-name">{imovel.tipo_imovel} ({imovel.tipologia})</span>
-                        <span className="item-subtitle-details">
-                          {imovel.freguesia}, {imovel.cidade} | {formatCurrency(imovel.preco_objetivo)}
-                        </span>
-                        <div style={{ marginTop: '4px', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                          Modificado: {new Date(imovel.updated_at).toLocaleDateString('pt-PT')}
-                        </div>
-                      </div>
-                      <div className="card-header-actions">
-                        <button 
-                          onClick={() => startEditImovel(imovel)} 
-                          className="btn-edit-icon"
-                          title="Editar Imóvel"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button 
-                          onClick={(e) => handleDeleteImovel(imovel.id, e)} 
-                          className="btn-danger-icon"
-                          title="Remover Imóvel"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                    Nenhum imóvel registado até ao momento.
-                  </div>
-                )
-              ) : (
-                compradores.length > 0 ? (
-                  compradores.map(comprador => (
-                    <div 
-                      key={comprador.id} 
-                      className={`item-list-row ${selectedComprador?.id === comprador.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedComprador(comprador)}
-                    >
-                      <div className="item-info-main">
-                        <span className="item-title-name">{comprador.comprador_nome}</span>
-                        <span className="item-subtitle-details">
-                          Orçamento: {formatCurrency(comprador.orcamento_maximo)}
-                        </span>
-                        <div style={{ marginTop: '4px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          {comprador.foi_contactado ? (
-                            <span style={{ color: 'var(--urgency-baixa)' }}>📞 Contactado</span>
-                          ) : (
-                            <span style={{ color: 'var(--urgency-alta)' }}>⚠️ Por contactar</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="card-header-actions" onClick={e => e.stopPropagation()}>
-                        <button 
-                          onClick={() => startEditComprador(comprador)} 
-                          className="btn-edit-icon"
-                          title="Editar Perfil"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button 
-                          onClick={(e) => handleDeleteComprador(comprador.id, e)} 
-                          className="btn-danger-icon"
-                          title="Remover Comprador"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                    Nenhum comprador registado até ao momento.
-                  </div>
-                )
-              )}
-            </div>
+        {/* Topbar */}
+        <header className="app-topbar">
+          <div className="topbar-title">
+            {activeMenu === 'dashboard' && 'Painel Geral'}
+            {activeMenu === 'kanban' && 'Gestão de Leads & Negócios'}
+            {activeMenu === 'imoveis' && 'Base de Dados de Imóveis'}
+            {activeMenu === 'compradores' && 'Base de Dados de Compradores'}
+            {activeMenu === 'calendario' && 'Calendário de Atividades'}
+            {activeMenu === 'definicoes' && 'Definições do Sistema'}
           </div>
-        </section>
 
-        {/* Coluna Central de Visualização Principal */}
-        <section className="main-column">
-          {/* Navegação entre abas da área de visualização principal */}
-          <nav className="tabs-header" style={{ maxWidth: '400px' }}>
+          <div className="topbar-actions">
             <button 
-              className={`tab-btn ${activeMainTab === 'matching' ? 'active' : ''}`}
-              onClick={() => setActiveMainTab('matching')}
+              className="btn btn-secondary" 
+              onClick={() => {
+                setEditingImovelId(null);
+                setIsImovelModalOpen(true);
+              }}
             >
-              <Sparkles size={16} />
-              <span>Matching Engine</span>
+              <Plus size={16} />
+              <span>Novo Imóvel</span>
             </button>
             <button 
-              className={`tab-btn ${activeMainTab === 'calendario' ? 'active' : ''}`}
-              onClick={() => setActiveMainTab('calendario')}
+              className="btn btn-primary"
+              onClick={() => {
+                setEditingCompradorId(null);
+                setIsCompradorModalOpen(true);
+              }}
             >
-              <Calendar size={16} />
-              <span>Calendário de Atividades</span>
+              <PlusCircle size={16} />
+              <span>Nova Lead</span>
             </button>
-          </nav>
+          </div>
+        </header>
 
-          {/* TAB 1: MATCHING ENGINE */}
-          {activeMainTab === 'matching' && (
-            <>
-              <div className="section-header">
-                <h1 className="section-title">Engine de Matching Inteligente</h1>
-                <Sparkles size={24} style={{ color: 'var(--accent-gold)' }} />
-              </div>
-
-              <div className="matching-engine-container">
-                {/* Seletor de Leads à Esquerda */}
-                <div className="matching-leads-selector">
-                  <label style={{ fontSize: '0.85rem', marginBottom: '0.25rem', display: 'block' }}>Selecionar Lead para Matching</label>
-                  
-                  <div className="leads-list">
-                    {compradores.length > 0 ? (
-                      compradores.map(comprador => (
-                        <div 
-                          key={comprador.id} 
-                          className={`lead-selector-card ${selectedComprador?.id === comprador.id ? 'selected' : ''}`}
-                          onClick={() => setSelectedComprador(comprador)}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: '1rem' }}>{comprador.comprador_nome}</div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                              Orçamento: <strong style={{ color: '#fff' }}>{formatCurrency(comprador.orcamento_maximo)}</strong>
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                              Zonas: {comprador.zonas_pretendidas.join(', ')}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                            <span className={`badge badge-urgency-${comprador.urgencia}`}>Urgência {comprador.urgencia}</span>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'right' }}>
-                              {comprador.tipos_imovel_pretendidos.join('/')}
-                            </span>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-state" style={{ padding: '2rem 1.5rem' }}>
-                        <Users className="empty-state-icon" />
-                        <div className="empty-state-title">Sem Leads Ativas</div>
-                        <div className="empty-state-desc">Registe compradores na coluna lateral esquerda para processar o matching.</div>
-                      </div>
-                    )}
+        {/* Painel Central com Scroll */}
+        <section className="view-panel">
+          
+          {/* TAB 1: PAINEL GERAL (DASHBOARD) */}
+          {activeMenu === 'dashboard' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
+                
+                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Imóveis Registados</span>
+                    <Building size={20} style={{ color: 'var(--accent-gold)' }} />
                   </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>{vendedores.length}</div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Vendedores sob gestão</span>
                 </div>
 
-                {/* Painel de Resultados de Matching */}
-                <div className="matching-results-panel">
-                  {selectedComprador ? (
-                    <>
-                      <div className="results-header-info">
-                        <div>
-                          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 600 }}>
-                            Matches para {selectedComprador.comprador_nome}
-                          </h2>
-                          <div className="lead-contact-info" style={{ marginTop: '6px', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '16px' }}>
-                              <Phone size={14} style={{ color: 'var(--accent-gold)' }} />
-                              <span>Contacto: <strong>{selectedComprador.comprador_contacto}</strong></span>
-                            </div>
-                            
-                            {/* CRM DE CONTACTOS (Marcar Contacto) */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {selectedComprador.foi_contactado ? (
-                                <>
-                                  <span style={{ color: 'var(--urgency-baixa)', fontSize: '0.8rem' }}>
-                                    ✓ Contactado em {selectedComprador.data_contacto ? new Date(selectedComprador.data_contacto).toLocaleString('pt-PT').slice(0, 16) : ''}
-                                  </span>
-                                  <button 
-                                    className="btn" 
-                                    onClick={() => handleToggleContactoRapido(selectedComprador, false)}
-                                    style={{ padding: '2px 8px', fontSize: '0.7rem', backgroundColor: 'rgba(255,255,255,0.05)' }}
-                                  >
-                                    Limpar
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <span style={{ color: 'var(--urgency-alta)', fontSize: '0.8rem', fontWeight: 600 }}>⚠️ Contacto Pendente</span>
-                                  <button 
-                                    className="btn btn-primary" 
-                                    onClick={() => handleToggleContactoRapido(selectedComprador, true)}
-                                    style={{ padding: '2px 8px', fontSize: '0.7rem' }}
-                                  >
-                                    Marcar Contactado
-                                  </button>
-                                </>
+                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Clientes Ativos</span>
+                    <Users size={20} style={{ color: 'var(--accent-blue)' }} />
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>{compradores.length}</div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Leads em prospeção</span>
+                </div>
+
+                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Negócios Fechados</span>
+                    <Heart size={20} style={{ color: 'var(--urgency-baixa)' }} />
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>
+                    {allMatches.filter(m => m.estado_match === 'Negócio Fechado').length}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No pipeline de vendas</span>
+                </div>
+
+                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Volume de Vendas</span>
+                    <TrendingUp size={20} style={{ color: 'var(--accent-purple)' }} />
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '0.85rem', color: 'var(--urgency-baixa)' }}>
+                    {formatCurrency(totalVolumeNegocios)}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Faturação sob mediação</span>
+                </div>
+
+              </div>
+
+              {/* Tabela de Atividades Recentes */}
+              <div className="data-table-card" style={{ marginTop: 0 }}>
+                <div className="table-header-bar">
+                  <h3 className="table-header-title">Ultimos Matches Qualificados</h3>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="app-table">
+                    <thead>
+                      <tr>
+                        <th>Comprador</th>
+                        <th>Imóvel Compatível</th>
+                        <th>Preço Anunciado</th>
+                        <th>Score</th>
+                        <th>Estado CRM</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allMatches.slice(0, 5).map((match, idx) => (
+                        <tr key={idx}>
+                          <td style={{ fontWeight: 700 }}>{match.comprador_nome}</td>
+                          <td>{match.tipologia} em {match.freguesia}</td>
+                          <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(match.preco_objetivo)}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>{match.match_score}%</td>
+                          <td>
+                            <span 
+                              className="badge"
+                              style={{
+                                border: '1px solid',
+                                backgroundColor: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
+                                color: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
+                              }}
+                            >
+                              {match.estado_match}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {allMatches.length === 0 && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                            Sem interações de matches de momento.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: GESTÃO DE NEGÓCIOS (KANBAN BOARD) */}
+          {activeMenu === 'kanban' && (
+            <div className="kanban-board">
+              
+              {/* COLUNA 1: NOVAS LEADS (Pendente) */}
+              <div className="kanban-column">
+                <div className="column-header">
+                  <div className="column-title-box">
+                    <span className="column-dot azul"></span>
+                    <span className="column-title">Novas Leads</span>
+                  </div>
+                  <span className="column-count">{getColMatches('Pendente').length}</span>
+                </div>
+                {getColMatches('Pendente').map((match, idx) => (
+                  <KanbanCard 
+                    key={idx} 
+                    match={match} 
+                    compradores={compradores}
+                    vendedores={vendedores}
+                    onStatusChange={handleUpdateInteracao}
+                    onToggleContacto={handleToggleContactoRapido}
+                    onEditComprador={startEditComprador}
+                  />
+                ))}
+              </div>
+
+              {/* COLUNA 2: EM CONTACTO (Visita Agendada) */}
+              <div className="kanban-column">
+                <div className="column-header">
+                  <div className="column-title-box">
+                    <span className="column-dot amarelo"></span>
+                    <span className="column-title">Em Contacto</span>
+                  </div>
+                  <span className="column-count">{getColMatches('Visita Agendada').length}</span>
+                </div>
+                {getColMatches('Visita Agendada').map((match, idx) => (
+                  <KanbanCard 
+                    key={idx} 
+                    match={match} 
+                    compradores={compradores}
+                    vendedores={vendedores}
+                    onStatusChange={handleUpdateInteracao}
+                    onToggleContacto={handleToggleContactoRapido}
+                    onEditComprador={startEditComprador}
+                  />
+                ))}
+              </div>
+
+              {/* COLUNA 3: PROPOSTA APRESENTADA */}
+              <div className="kanban-column">
+                <div className="column-header">
+                  <div className="column-title-box">
+                    <span className="column-dot roxo"></span>
+                    <span className="column-title">Proposta</span>
+                  </div>
+                  <span className="column-count">{getColMatches('Proposta Apresentada').length}</span>
+                </div>
+                {getColMatches('Proposta Apresentada').map((match, idx) => (
+                  <KanbanCard 
+                    key={idx} 
+                    match={match} 
+                    compradores={compradores}
+                    vendedores={vendedores}
+                    onStatusChange={handleUpdateInteracao}
+                    onToggleContacto={handleToggleContactoRapido}
+                    onEditComprador={startEditComprador}
+                  />
+                ))}
+              </div>
+
+              {/* COLUNA 4: NEGÓCIO FECHADO */}
+              <div className="kanban-column">
+                <div className="column-header">
+                  <div className="column-title-box">
+                    <span className="column-dot verde"></span>
+                    <span className="column-title">Negócio Fechado</span>
+                  </div>
+                  <span className="column-count">{getColMatches('Negócio Fechado').length}</span>
+                </div>
+                {getColMatches('Negócio Fechado').map((match, idx) => (
+                  <KanbanCard 
+                    key={idx} 
+                    match={match} 
+                    compradores={compradores}
+                    vendedores={vendedores}
+                    onStatusChange={handleUpdateInteracao}
+                    onToggleContacto={handleToggleContactoRapido}
+                    onEditComprador={startEditComprador}
+                  />
+                ))}
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 3: IMÓVEIS (VENDEDORES) */}
+          {activeMenu === 'imoveis' && (
+            <div className="data-table-card">
+              <div className="table-header-bar">
+                <h3 className="table-header-title">Lista de Propriedades</h3>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setEditingImovelId(null);
+                    setVNome('');
+                    setVContacto('');
+                    setVPrecoObj('');
+                    setVPrecoMin('');
+                    setVArea('');
+                    setVRua('');
+                    setVCidade('');
+                    setVFreguesia('');
+                    setVObs('');
+                    setIsImovelModalOpen(true);
+                  }}
+                >
+                  <Plus size={16} />
+                  <span>Adicionar Imóvel</span>
+                </button>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="app-table">
+                  <thead>
+                    <tr>
+                      <th>Proprietário</th>
+                      <th>Imóvel</th>
+                      <th>Localização</th>
+                      <th>Preço Anunciado</th>
+                      <th>Área (m²)</th>
+                      <th>Urgência</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendedores.map(imovel => (
+                      <tr key={imovel.id}>
+                        <td style={{ fontWeight: 700 }}>
+                          <div>{imovel.proprietario_nome}</div>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{imovel.proprietario_contacto}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600 }}>{imovel.tipo_imovel}</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}> ({imovel.tipologia})</span>
+                        </td>
+                        <td>{imovel.freguesia}, {imovel.cidade}</td>
+                        <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(imovel.preco_objetivo)}</td>
+                        <td>{imovel.area_m2} m²</td>
+                        <td>
+                          <span className={`badge badge-urgencia-${imovel.urgencia}`}>
+                            {imovel.urgencia}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={() => startEditImovel(imovel)}
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 8px' }}
+                              title="Editar"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteImovel(imovel.id)}
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
+                              title="Eliminar"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {vendedores.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                          Nenhum imóvel registado. Clica em "Adicionar Imóvel" para começar.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: COMPRADORES */}
+          {activeMenu === 'compradores' && (
+            <div className="data-table-card">
+              <div className="table-header-bar">
+                <h3 className="table-header-title">Lista de Leads de Compradores</h3>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setEditingCompradorId(null);
+                    setCNome('');
+                    setCContacto('');
+                    setCOrcamento('');
+                    setCTipologias(['T2']);
+                    setCTiposImovel(['Apartamento']);
+                    setCZonas([]);
+                    setCObs('');
+                    setCFoiContactado(false);
+                    setCDataContacto('');
+                    setIsCompradorModalOpen(true);
+                  }}
+                >
+                  <Plus size={16} />
+                  <span>Registar Comprador</span>
+                </button>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="app-table">
+                  <thead>
+                    <tr>
+                      <th>Comprador</th>
+                      <th>Orçamento Máx.</th>
+                      <th>Preferências</th>
+                      <th>Zonas Pretendidas</th>
+                      <th>Urgência</th>
+                      <th>Último Contacto</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compradores.map(comp => (
+                      <tr key={comp.id}>
+                        <td style={{ fontWeight: 700 }}>
+                          <div>{comp.comprador_nome}</div>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{comp.comprador_contacto}</span>
+                        </td>
+                        <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{formatCurrency(comp.orcamento_maximo)}</td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.8rem' }}>
+                            <span>{comp.tipos_imovel_pretendidos.join(', ')}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>{comp.tipologias_pretendidas.join(', ')}</span>
+                          </div>
+                        </td>
+                        <td>{comp.zonas_pretendidas.join(', ')}</td>
+                        <td>
+                          <span className={`badge badge-urgencia-${comp.urgencia}`}>
+                            {comp.urgencia}
+                          </span>
+                        </td>
+                        <td>
+                          {comp.foi_contactado ? (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ color: 'var(--urgency-baixa)', fontWeight: 600, fontSize: '0.8rem' }}>Contactado</span>
+                              {comp.data_contacto && (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                  {new Date(comp.data_contacto).toLocaleDateString('pt-PT')}
+                                </span>
                               )}
                             </div>
+                          ) : (
+                            <span style={{ color: 'var(--urgency-alta)', fontWeight: 600, fontSize: '0.8rem' }}>Pendente</span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={() => startEditComprador(comp)}
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 8px' }}
+                              title="Editar"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteComprador(comp.id)}
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
+                              title="Eliminar"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <span className={`badge badge-urgency-${selectedComprador.urgencia}`}>Urgência {selectedComprador.urgencia}</span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                            {selectedComprador.tipos_imovel_pretendidos.join('/')} • {selectedComprador.tipologias_pretendidas.join('/')}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Lista de Imóveis Compatíveis */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                        {matches.length > 0 ? (
-                          matches.map(match => {
-                            const imovelDetalhado = vendedores.find(v => v.id === match.imovel_id);
-                            const requerNegociacao = match.preco_objetivo > selectedComprador.orcamento_maximo;
-                            const matchKey = `${match.comprador_id}_${match.imovel_id}`;
-                            
-                            const notasValorLocal = editingNotas[matchKey] !== undefined 
-                              ? editingNotas[matchKey] 
-                              : (match.notas_match || '');
-
-                            return (
-                              <div key={match.imovel_id} className="match-card">
-                                <div className="match-card-top">
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                      <span style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
-                                        {imovelDetalhado?.tipo_imovel || 'Imóvel'} ({match.tipologia})
-                                      </span>
-                                      <span className={`badge badge-urgency-${match.imovel_urgencia}`}>
-                                        Imóvel {match.imovel_urgencia}
-                                      </span>
-                                    </div>
-                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                                      Localização: <strong>{match.freguesia}, {match.cidade}</strong>
-                                    </span>
-                                  </div>
-
-                                  <div className="match-score-radial" title={`Score de Match: ${match.match_score}/100`}>
-                                    <span className="match-score-val">{match.match_score}%</span>
-                                    <span className="match-score-label">Match</span>
-                                  </div>
-                                </div>
-
-                                <div className="match-details-grid">
-                                  <div className="match-details-item">
-                                    <span className="match-details-lbl">Preço Proposto</span>
-                                    <span className="match-details-val" style={{ color: 'var(--accent-gold)', fontSize: '0.95rem' }}>
-                                      {formatCurrency(match.preco_objetivo)}
-                                    </span>
-                                  </div>
-                                  <div className="match-details-item">
-                                    <span className="match-details-lbl">Área Útil</span>
-                                    <span className="match-details-val">
-                                      {imovelDetalhado?.area_m2 ? `${imovelDetalhado.area_m2} m²` : '---'}
-                                    </span>
-                                  </div>
-                                  <div className="match-details-item">
-                                    <span className="match-details-lbl">Andar</span>
-                                    <span className="match-details-val">{imovelDetalhado?.andar || '---'}</span>
-                                  </div>
-                                  <div className="match-details-item">
-                                    <span className="match-details-lbl">Contacto Proprietário</span>
-                                    <span className="match-details-val" style={{ fontSize: '0.8rem' }}>
-                                      {match.proprietario_nome} ({imovelDetalhado?.proprietario_contacto || '---'})
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {requerNegociacao && (
-                                  <div className="match-negotiation-alert">
-                                    <AlertTriangle size={16} />
-                                    <span>
-                                      <strong>Requer Negociação:</strong> Preço proposto ({formatCurrency(match.preco_objetivo)}) excede orçamento ({formatCurrency(selectedComprador.orcamento_maximo)}), viável por flexibilidade do vendedor.
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* CRM: ESTADO DO NEGÓCIO */}
-                                <div style={{ 
-                                  borderTop: '1px solid var(--border-color)', 
-                                  paddingTop: '1rem',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '0.75rem' 
-                                }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <Calendar size={15} style={{ color: 'var(--accent-gold)' }} />
-                                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                        CRM Estado:
-                                      </span>
-                                      <span 
-                                        className="badge" 
-                                        style={{ 
-                                          ...getEstadoBadgeStyle(match.estado_match),
-                                          fontSize: '0.7rem', 
-                                          padding: '2px 8px'
-                                        }}
-                                      >
-                                        {match.estado_match}
-                                      </span>
-                                    </div>
-
-                                    <select 
-                                      value={match.estado_match} 
-                                      onChange={(e) => handleUpdateInteracao(match.comprador_id, match.imovel_id, e.target.value, match.notas_match || '')}
-                                      style={{ 
-                                        width: 'auto', 
-                                        padding: '4px 8px', 
-                                        fontSize: '0.8rem', 
-                                        backgroundColor: 'var(--bg-card-hover)',
-                                        borderRadius: '4px'
-                                      }}
-                                    >
-                                      <option value="Pendente">Pendente</option>
-                                      <option value="Visita Agendada">📆 Visita Agendada</option>
-                                      <option value="Proposta Apresentada">✉️ Proposta Apresentada</option>
-                                      <option value="Negócio Fechado">🎉 Negócio Fechado</option>
-                                      <option value="Arquivado">📁 Arquivado</option>
-                                    </select>
-                                  </div>
-
-                                  <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input 
-                                      type="text" 
-                                      placeholder="Escreva feedback do negócio ou da visita..." 
-                                      value={notasValorLocal}
-                                      onChange={(e) => setEditingNotas({ ...editingNotas, [matchKey]: e.target.value })}
-                                      style={{ 
-                                        flexGrow: 1, 
-                                        padding: '6px 10px', 
-                                        fontSize: '0.85rem', 
-                                        backgroundColor: 'rgba(255,255,255,0.02)',
-                                        borderRadius: '4px'
-                                      }}
-                                    />
-                                    <button 
-                                      type="button" 
-                                      className="btn btn-secondary"
-                                      onClick={() => handleUpdateInteracao(match.comprador_id, match.imovel_id, match.estado_match, notasValorLocal)}
-                                      style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                                    >
-                                      Gravar
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {imovelDetalhado && (
-                                  <div className="match-features-chips" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem', marginTop: '4px' }}>
-                                    {imovelDetalhado.tem_elevador && (
-                                      <span className="feature-chip-active">✓ Elevador</span>
-                                    )}
-                                    {imovelDetalhado.tem_garagem && (
-                                      <span className="feature-chip-active">✓ Garagem</span>
-                                    )}
-                                    {imovelDetalhado.tem_quintal && (
-                                      <span className="feature-chip-active">✓ Quintal/Varanda</span>
-                                    )}
-                                    {imovelDetalhado.tem_arrecadacao && (
-                                      <span className="feature-chip-active">✓ Arrecadação</span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="empty-state">
-                            <AlertTriangle className="empty-state-icon" style={{ color: 'var(--urgency-media)' }} />
-                            <div className="empty-state-title">Sem Matches Elegíveis</div>
-                            <div className="empty-state-desc">
-                              Não foram encontrados imóveis elegíveis para as preferências de {selectedComprador.comprador_nome}.
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="empty-state" style={{ minHeight: '300px', display: 'flex', justifyContent: 'center' }}>
-                      <Sparkles className="empty-state-icon" />
-                      <div className="empty-state-title">Selecione um Comprador</div>
-                      <div className="empty-state-desc">
-                        Selecione uma lead de comprador da lista à esquerda para analisar os matches.
-                      </div>
-                    </div>
-                  )}
-                </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {compradores.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                          Nenhum comprador registado. Clica em "Registar Comprador" para começar.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </>
+            </div>
           )}
 
-          {/* TAB 2: CALENDÁRIO DE ATIVIDADES (NOVO) */}
-          {activeMainTab === 'calendario' && (
-            <div className="calendar-wrapper">
-              
-              {/* Calendário Mensal */}
+          {/* TAB 5: CALENDÁRIO */}
+          {activeMenu === 'calendario' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '2rem', alignItems: 'start' }}>
               <div className="calendar-main-card">
                 <div className="calendar-header-nav">
-                  <button onClick={prevMonth} className="btn-edit-icon" style={{ padding: '8px' }}>
-                    <ChevronLeft size={20} />
+                  <button onClick={prevMonth} className="btn-quick-action" style={{ backgroundColor: 'var(--bg-input)' }}>
+                    <ChevronLeft size={16} />
                   </button>
                   <h2 className="calendar-month-title">
                     {monthNames[calendarDate.getMonth()]} {calendarDate.getFullYear()}
                   </h2>
-                  <button onClick={nextMonth} className="btn-edit-icon" style={{ padding: '8px' }}>
-                    <ChevronRight size={20} />
+                  <button onClick={nextMonth} className="btn-quick-action" style={{ backgroundColor: 'var(--bg-input)' }}>
+                    <ChevronRight size={16} />
                   </button>
                 </div>
 
@@ -1828,27 +1307,8 @@ function App() {
                 <div className="calendar-grid">
                   {renderCalendarDays()}
                 </div>
-
-                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div className="calendar-event-dot dot-imovel" /> <span>Registo Imóvel</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div className="calendar-event-dot dot-imovel-update" /> <span>Alteração Imóvel</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div className="calendar-event-dot dot-comprador" /> <span>Registo Comprador</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div className="calendar-event-dot dot-comprador-update" /> <span>Alteração Comprador</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div className="calendar-event-dot dot-contacto" /> <span>Contacto Cliente</span>
-                  </div>
-                </div>
               </div>
 
-              {/* Lista de Atividades do Dia Selecionado */}
               <div className="calendar-activities-card">
                 <h3 className="card-title" style={{ fontSize: '1.1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
                   Atividades em: {selectedDay.toLocaleDateString('pt-PT')}
@@ -1873,18 +1333,594 @@ function App() {
                       <Calendar className="empty-state-icon" />
                       <div className="empty-state-title" style={{ fontSize: '0.95rem' }}>Sem Atividades</div>
                       <div className="empty-state-desc" style={{ fontSize: '0.8rem' }}>
-                        Nenhum evento registado para este dia.
+                        Nenhum evento agendado para este dia.
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-
             </div>
           )}
 
+          {/* TAB 6: DEFINIÇÕES */}
+          {activeMenu === 'definicoes' && (
+            <div className="kanban-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1rem' }}>Sincronização da Base de Dados</h2>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '1rem', backgroundColor: 'var(--urgency-baixa-bg)', color: 'var(--urgency-baixa)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '1.5rem' }}>
+                <Check size={20} />
+                <span style={{ fontWeight: 600 }}>Ligado com Sucesso ao Supabase</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
+                <div>
+                  <strong>URL da Base de Dados:</strong>
+                  <code style={{ display: 'block', backgroundColor: 'var(--bg-app)', padding: '6px 10px', borderRadius: '4px', marginTop: '4px', fontSize: '0.8rem' }}>
+                    https://akfykaystwyqzrsxdfjh.supabase.co
+                  </code>
+                </div>
+                <div>
+                  <strong>Estado RLS:</strong>
+                  <span style={{ color: 'var(--urgency-baixa)', fontWeight: 700, marginLeft: '8px' }}>Ativo (Acesso Público Total)</span>
+                </div>
+                <div>
+                  <strong>Nome de Exibição do Projeto na Cloud:</strong>
+                  <span style={{ fontWeight: 600, marginLeft: '8px' }}>imo</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Banner Promocional Inferior (Design da Referência) */}
+          <div className="bottom-banner">
+            <div className="banner-content">
+              <Sparkles size={20} style={{ color: 'var(--accent-pink)' }} />
+              <span className="banner-text">
+                <strong>Motor de Correspondência Reativo:</strong> O Imo calcula automaticamente a compatibilidade entre compradores e imóveis em tempo real na base de dados.
+              </span>
+            </div>
+          </div>
+
         </section>
       </main>
+
+      {/* MODAL 1: ADICIONAR / EDITAR IMÓVEL */}
+      {isImovelModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content-card">
+            <div className="modal-header">
+              <h3 className="modal-title">{editingImovelId ? 'Editar Imóvel' : 'Registar Novo Imóvel'}</h3>
+              <button className="modal-close-btn" onClick={() => setIsImovelModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleAddImovel} className="modal-body form-grid">
+              
+              <div className="form-group form-group-full">
+                <label>Proprietário (Nome)*</label>
+                <input 
+                  type="text" 
+                  value={vNome}
+                  onChange={(e) => setVNome(e.target.value)}
+                  placeholder="Ex: Manuel Antunes"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Contacto*</label>
+                <input 
+                  type="text" 
+                  value={vContacto}
+                  onChange={(e) => setVContacto(e.target.value)}
+                  placeholder="Ex: 912345678"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Tipo de Imóvel*</label>
+                <select value={vTipoImovel} onChange={(e) => setVTipoImovel(e.target.value)}>
+                  {tiposImovelDisponiveis.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Preço Anunciado (€)*</label>
+                <input 
+                  type="number" 
+                  value={vPrecoObj}
+                  onChange={(e) => setVPrecoObj(e.target.value)}
+                  placeholder="Ex: 245000"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Preço Mínimo Oculto (€)*</label>
+                <input 
+                  type="number" 
+                  value={vPrecoMin}
+                  onChange={(e) => setVPrecoMin(e.target.value)}
+                  placeholder="Preço confidencial"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Tipologia*</label>
+                <select value={vTipologia} onChange={(e) => setVTipologia(e.target.value)}>
+                  <option value="T0">T0</option>
+                  <option value="T1">T1</option>
+                  <option value="T2">T2</option>
+                  <option value="T3">T3</option>
+                  <option value="T4">T4</option>
+                  <option value="T5+">T5+</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Área Útil (m²)*</label>
+                <input 
+                  type="number" 
+                  value={vArea}
+                  onChange={(e) => setVArea(e.target.value)}
+                  placeholder="Ex: 110"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Andar / Piso*</label>
+                <input 
+                  type="text" 
+                  value={vAndar}
+                  onChange={(e) => setVAndar(e.target.value)}
+                  placeholder="Ex: R/C ou 3º"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Urgência de Venda*</label>
+                <select value={vUrgencia} onChange={(e) => setVUrgencia(e.target.value as any)}>
+                  <option value="Baixa">🟢 Baixa</option>
+                  <option value="Media">🟡 Média</option>
+                  <option value="Alta">🔴 Alta</option>
+                </select>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Morada / Rua*</label>
+                <input 
+                  type="text" 
+                  value={vRua}
+                  onChange={(e) => setVRua(e.target.value)}
+                  placeholder="Nome da rua e lote"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Cidade (Concelho)*</label>
+                <input 
+                  type="text" 
+                  value={vCidade}
+                  list="cidades-modal"
+                  onChange={(e) => {
+                    setVCidade(e.target.value);
+                    fetchConcelhos(e.target.value);
+                  }}
+                  placeholder="Ex: Beja"
+                  required
+                />
+                <datalist id="cidades-modal">
+                  {concelhoSugestoes.map((c, idx) => <option key={idx} value={c} />)}
+                </datalist>
+              </div>
+
+              <div className="form-group">
+                <label>Freguesia*</label>
+                <input 
+                  type="text" 
+                  value={vFreguesia}
+                  list="freguesias-modal"
+                  onChange={(e) => {
+                    setVFreguesia(e.target.value);
+                    fetchFreguesias(e.target.value, vCidade);
+                  }}
+                  placeholder="Ex: Salvador"
+                  required
+                />
+                <datalist id="freguesias-modal">
+                  {freguesiaSugestoes.map((f, idx) => <option key={idx} value={f} />)}
+                </datalist>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Características do Imóvel</label>
+                <div className="checkbox-group">
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={vElevador} onChange={e => setVElevador(e.target.checked)} />
+                    Elevador
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={vGaragem} onChange={e => setVGaragem(e.target.checked)} />
+                    Garagem
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={vQuintal} onChange={e => setVQuintal(e.target.checked)} />
+                    Espaço Exterior
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={vArrecadacao} onChange={e => setVArrecadacao(e.target.checked)} />
+                    Arrecadação
+                  </label>
+                </div>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Flexibilidade do Vendedor</label>
+                <select value={vFlex} onChange={(e) => setVFlex(e.target.value as any)}>
+                  <option value="Baixa">Baixa flexibilidade de preço</option>
+                  <option value="Media">Média (Aberto a propostas razoáveis)</option>
+                  <option value="Alta">Alta (Negociável / Muito flexível)</option>
+                </select>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Observações</label>
+                <textarea 
+                  rows={2} 
+                  value={vObs}
+                  onChange={(e) => setVObs(e.target.value)}
+                  placeholder="Notas adicionais sobre o negócio..."
+                />
+              </div>
+
+              <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsImovelModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Gravar Imóvel</button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ADICIONAR / EDITAR COMPRADOR */}
+      {isCompradorModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content-card">
+            <div className="modal-header">
+              <h3 className="modal-title">{editingCompradorId ? 'Editar Perfil de Comprador' : 'Registar Lead de Comprador'}</h3>
+              <button className="modal-close-btn" onClick={() => setIsCompradorModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleAddComprador} className="modal-body form-grid">
+              
+              <div className="form-group form-group-full">
+                <label>Comprador (Nome)*</label>
+                <input 
+                  type="text" 
+                  value={cNome}
+                  onChange={(e) => setCNome(e.target.value)}
+                  placeholder="Ex: Carolina Pais"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Contacto Telefónico*</label>
+                <input 
+                  type="text" 
+                  value={cContacto}
+                  onChange={(e) => setCContacto(e.target.value)}
+                  placeholder="Ex: 934567890"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Orçamento Máximo (€)*</label>
+                <input 
+                  type="number" 
+                  value={cOrcamento}
+                  onChange={(e) => setCOrcamento(e.target.value)}
+                  placeholder="Ex: 320000"
+                  required
+                />
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Tipo de Propriedade Pretendida* (Múltiplo)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                  {tiposImovelDisponiveis.map(tipo => (
+                    <div 
+                      key={tipo}
+                      className={`badge`}
+                      style={{
+                        padding: '6px 12px',
+                        cursor: 'pointer',
+                        border: '1px solid',
+                        borderColor: cTiposImovel.includes(tipo) ? 'var(--text-primary)' : 'var(--border-color)',
+                        backgroundColor: cTiposImovel.includes(tipo) ? 'var(--text-primary)' : 'var(--bg-app)',
+                        color: cTiposImovel.includes(tipo) ? 'white' : 'var(--text-secondary)'
+                      }}
+                      onClick={() => handleToggleTipoImovel(tipo)}
+                    >
+                      {tipo}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Tipologias Aceitáveis* (Múltiplo)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                  {tipologiasDisponiveis.map(tip => (
+                    <div 
+                      key={tip}
+                      className={`badge`}
+                      style={{
+                        padding: '6px 12px',
+                        cursor: 'pointer',
+                        border: '1px solid',
+                        borderColor: cTipologias.includes(tip) ? 'var(--text-primary)' : 'var(--border-color)',
+                        backgroundColor: cTipologias.includes(tip) ? 'var(--text-primary)' : 'var(--bg-app)',
+                        color: cTipologias.includes(tip) ? 'white' : 'var(--text-secondary)'
+                      }}
+                      onClick={() => handleToggleTipologia(tip)}
+                    >
+                      {tip}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Zonas Geográficas Pretendidas*</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input 
+                    type="text" 
+                    value={cZonaInput}
+                    list="zonas-modal"
+                    onChange={(e) => {
+                      setCZonaInput(e.target.value);
+                      fetchConcelhos(e.target.value);
+                    }}
+                    placeholder="Escreve e clica em (+)"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddZona();
+                      }
+                    }}
+                  />
+                  <datalist id="zonas-modal">
+                    {concelhoSugestoes.map((c, idx) => <option key={idx} value={c} />)}
+                  </datalist>
+                  <button type="button" className="btn btn-secondary" onClick={handleAddZona}>
+                    <Plus size={16} />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                  {cZonas.map(z => (
+                    <span 
+                      key={z} 
+                      className="badge" 
+                      style={{ backgroundColor: 'var(--bg-input)', display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                      onClick={() => handleRemoveZona(z)}
+                    >
+                      {z} <X size={10} />
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Qualificação do contacto */}
+              <div className="form-group form-group-full" style={{ borderTop: '1px solid var(--border-color)', padding: '0.85rem 0' }}>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={cFoiContactado} onChange={e => setCFoiContactado(e.target.checked)} />
+                  Já foi efetuado o contacto inicial?
+                </label>
+                {cFoiContactado && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Data e Hora de Contacto</label>
+                    <input 
+                      type="datetime-local" 
+                      value={cDataContacto}
+                      onChange={e => setCDataContacto(e.target.value)}
+                      required={cFoiContactado}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Requisitos Adicionais</label>
+                <div className="checkbox-group">
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={cGaragem} onChange={e => setCGaragem(e.target.checked)} />
+                    Exige Garagem
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={cElevadorRc} onChange={e => setCElevadorRc(e.target.checked)} />
+                    Exige Elevador ou R/C
+                  </label>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={cEspacoExt} onChange={e => setCEspacoExt(e.target.checked)} />
+                    Prefere Varanda/Quintal
+                  </label>
+                </div>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Urgência de Aquisição*</label>
+                <select value={cUrgencia} onChange={(e) => setCUrgencia(e.target.value as any)}>
+                  <option value="Baixa">🟢 Baixa (Procura mas sem pressa)</option>
+                  <option value="Media">🟡 Média (Acompanhamento regular)</option>
+                  <option value="Alta">🔴 Alta (Urgente - Pretende comprar já)</option>
+                </select>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Notas de Perfil</label>
+                <textarea 
+                  rows={2} 
+                  value={cObs}
+                  onChange={(e) => setCObs(e.target.value)}
+                  placeholder="Notas adicionais sobre o perfil..."
+                />
+              </div>
+
+              <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsCompradorModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Gravar Lead</button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// Sub-componente de Cartão de Kanban para simplificar o ficheiro
+interface KanbanCardProps {
+  match: Match;
+  compradores: Comprador[];
+  vendedores: Imovel[];
+  onStatusChange: (compradorId: string, imovelId: string, estado: string, notas: string) => Promise<void>;
+  onToggleContacto: (compradorId: string, foiContactado: boolean) => Promise<void>;
+  onEditComprador: (comp: Comprador) => void;
+}
+
+function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleContacto, onEditComprador }: KanbanCardProps) {
+  const compradorDetalhe = compradores.find(c => c.id === match.comprador_id);
+  const imovelDetalhe = vendedores.find(v => v.id === match.imovel_id);
+  
+  const [localNotas, setLocalNotas] = useState(match.notas_match || '');
+
+  // Atualizar o input se as notas mudarem no Supabase
+  useEffect(() => {
+    setLocalNotas(match.notas_match || '');
+  }, [match.notas_match]);
+
+  const iniciais = match.comprador_nome
+    ? match.comprador_nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'C';
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+  };
+
+  // Determinar o badge do perfil baseado na urgência e orçamento
+  const getProfileClassAndLabel = () => {
+    if (match.preco_objetivo > 450000) {
+      return { class: 'luxury', label: 'LUXO' };
+    }
+    if (compradorDetalhe?.urgencia === 'Alta') {
+      return { class: 'investor', label: 'INVESTIDOR' };
+    }
+    return { class: 'buyer', label: 'COMPRADOR' };
+  };
+
+  const badgeProps = getProfileClassAndLabel();
+
+  return (
+    <div className="kanban-card">
+      <div className="card-top">
+        <div className="card-user-info">
+          <div className="user-avatar-circle" onClick={() => compradorDetalhe && onEditComprador(compradorDetalhe)} style={{ cursor: 'pointer' }} title="Editar Perfil">
+            {iniciais}
+          </div>
+          <div className="user-meta">
+            <span className="user-name">{match.comprador_nome}</span>
+            <span className="user-date">Urgência: {match.comprador_urgencia}</span>
+          </div>
+        </div>
+
+        <div className="card-actions-quick">
+          <button 
+            className="btn-quick-action phone" 
+            title={compradorDetalhe?.foi_contactado ? 'Já contactado' : 'Marcar como Contactado'}
+            onClick={() => onToggleContacto(match.comprador_id, !compradorDetalhe?.foi_contactado)}
+            style={{ backgroundColor: compradorDetalhe?.foi_contactado ? 'var(--urgency-baixa-bg)' : 'var(--accent-blue-bg)', color: compradorDetalhe?.foi_contactado ? 'var(--urgency-baixa)' : 'var(--accent-blue)' }}
+          >
+            <Phone size={14} />
+          </button>
+          <a href={`mailto:${match.comprador_nome.toLowerCase().replace(' ', '')}@email.com`} className="btn-quick-action email" title="Enviar E-mail">
+            <Mail size={14} />
+          </a>
+        </div>
+      </div>
+
+      <div className="card-badges-row">
+        <span className={`badge-profile ${badgeProps.class}`}>{badgeProps.label}</span>
+        <span className="card-budget">{formatCurrency(match.preco_objetivo)}</span>
+      </div>
+
+      {/* Painel do Imóvel de Match (Interested In) */}
+      <div className="card-interested-box">
+        <div className="interested-thumbnail">
+          <Building size={18} />
+        </div>
+        <div className="interested-details">
+          <span className="interested-lbl">Interessado em</span>
+          <span className="interested-name">{imovelDetalhe?.tipo_imovel || 'Propriedade'} ({match.tipologia})</span>
+          <span className="interested-location">
+            <MapPin size={10} style={{ display: 'inline', marginRight: '2px' }} />
+            {match.freguesia}, {match.cidade}
+          </span>
+        </div>
+      </div>
+
+      {/* CRM Controlos Integrados no Cartão */}
+      <div className="card-crm-controls">
+        <div className="crm-status-row">
+          <span className="crm-status-lbl">CRM Estado</span>
+          <select 
+            value={match.estado_match}
+            onChange={(e) => onStatusChange(match.comprador_id, match.imovel_id, e.target.value, localNotas)}
+            className="select-crm-status"
+          >
+            <option value="Pendente">Novas Leads</option>
+            <option value="Visita Agendada">📆 Visita Agendada</option>
+            <option value="Proposta Apresentada">✉️ Proposta</option>
+            <option value="Negócio Fechado">🎉 Fechado</option>
+            <option value="Arquivado">📁 Arquivado</option>
+          </select>
+        </div>
+
+        <div className="crm-notes-input-row">
+          <input 
+            type="text" 
+            placeholder="Escrever notas..."
+            value={localNotas}
+            onChange={(e) => setLocalNotas(e.target.value)}
+            className="crm-notes-input"
+          />
+          <button 
+            type="button" 
+            onClick={() => onStatusChange(match.comprador_id, match.imovel_id, match.estado_match, localNotas)}
+            className="btn-crm-save"
+          >
+            Gravar
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+          <span>Score: <strong style={{ color: 'var(--accent-blue)' }}>{match.match_score}%</strong></span>
+          {match.preco_objetivo > (compradorDetalhe?.orcamento_maximo || 0) && (
+            <span style={{ color: 'var(--urgency-media)', fontWeight: 700 }}>★ Requer Negociação</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
