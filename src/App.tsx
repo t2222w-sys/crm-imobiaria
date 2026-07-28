@@ -1384,6 +1384,45 @@ function App() {
         </section>
       </main>
 
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <nav className="mobile-bottom-nav">
+        <button 
+          className={`mobile-nav-item ${activeMenu === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveMenu('dashboard')}
+        >
+          <LayoutDashboard size={20} />
+          <span>Painel</span>
+        </button>
+        <button 
+          className={`mobile-nav-item ${activeMenu === 'kanban' ? 'active' : ''}`}
+          onClick={() => setActiveMenu('kanban')}
+        >
+          <FolderKanban size={20} />
+          <span>CRM</span>
+        </button>
+        <button 
+          className={`mobile-nav-item ${activeMenu === 'imoveis' ? 'active' : ''}`}
+          onClick={() => setActiveMenu('imoveis')}
+        >
+          <Home size={20} />
+          <span>Imóveis</span>
+        </button>
+        <button 
+          className={`mobile-nav-item ${activeMenu === 'compradores' ? 'active' : ''}`}
+          onClick={() => setActiveMenu('compradores')}
+        >
+          <Users size={20} />
+          <span>Clientes</span>
+        </button>
+        <button 
+          className={`mobile-nav-item ${activeMenu === 'calendario' ? 'active' : ''}`}
+          onClick={() => setActiveMenu('calendario')}
+        >
+          <Calendar size={20} />
+          <span>Agenda</span>
+        </button>
+      </nav>
+
       {/* MODAL 1: ADICIONAR / EDITAR IMÓVEL */}
       {isImovelModalOpen && (
         <div className="modal-overlay">

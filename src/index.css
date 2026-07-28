@@ -1037,3 +1037,131 @@ body {
   color: var(--text-muted);
   margin-top: 4px;
 }
+
+/* --- ADAPTAÇÕES DE GESTÃO DE DISPOSITIVOS MÓVEIS (MOBILE) --- */
+
+/* Bottom Navigation Bar para Mobile */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 65px;
+    background-color: var(--bg-sidebar);
+    border-top: 1px solid var(--border-color);
+    z-index: 200;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+    padding: 0 0.5rem;
+  }
+  
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    flex-grow: 1;
+    height: 100%;
+    transition: var(--transition-smooth);
+  }
+  
+  .mobile-nav-item:hover {
+    color: var(--text-primary);
+  }
+  
+  .mobile-nav-item.active {
+    color: var(--accent-pink);
+  }
+  
+  .view-panel {
+    padding: 1rem;
+    padding-bottom: 90px !important; /* Margem extra no fundo para a barra de navegação */
+  }
+  
+  /* Topbar responsiva */
+  .app-topbar {
+    padding: 0 1rem;
+  }
+  
+  .topbar-title {
+    font-size: 1.15rem;
+  }
+}
+
+/* Ajustes da Grelha Kanban Mobile */
+@media (max-width: 900px) {
+  .kanban-board {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 1rem;
+    padding-bottom: 1.25rem;
+    margin-top: 0.5rem;
+    height: calc(100vh - 180px);
+    width: 100%;
+  }
+  
+  .kanban-column {
+    flex: 0 0 85vw;
+    scroll-snap-align: start;
+    min-height: auto;
+    max-height: 100%;
+    overflow-y: auto;
+  }
+}
+
+/* Redução de tamanhos no Calendário Mobile */
+@media (max-width: 600px) {
+  .calendar-day-cell {
+    min-height: 50px;
+    padding: 4px;
+  }
+  
+  .calendar-day-num {
+    font-size: 0.75rem;
+  }
+  
+  .calendar-week-days {
+    font-size: 0.65rem;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Ajustes dos Modais em Mobile */
+@media (max-width: 600px) {
+  .modal-content-card {
+    max-height: 95vh;
+  }
+  
+  .modal-body {
+    padding: 1rem;
+  }
+}
+
+/* Esconder texto de botões na Topbar em Mobile */
+@media (max-width: 600px) {
+  .topbar-actions .btn span {
+    display: none;
+  }
+  
+  .topbar-actions .btn {
+    padding: 0.6rem;
+    border-radius: 50%;
+  }
+}
