@@ -867,7 +867,7 @@ function App() {
       <header className="app-header">
         <div className="brand-section">
           <div>
-            <span className="brand-logo">Imobi.</span>
+            <span className="brand-logo">Imo.</span>
             <div className="brand-tagline">CRM & Engine de Matching</div>
           </div>
         </div>
