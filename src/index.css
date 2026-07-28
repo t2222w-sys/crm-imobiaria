@@ -1260,8 +1260,25 @@ body {
   border-radius: 5px;
 }
 
-/* --- OTOMIZAÇÕES E AJUSTES RESPONSIVOS MOBILE PREMIUM --- */
-@media (max-width: 600px) {
+/* Classes Utilitárias de Visibilidade Responsiva */
+.desktop-only-view {
+  display: block;
+}
+
+.mobile-only-view {
+  display: none;
+}
+
+/* --- OTIMIZAÇÕES E AJUSTES RESPONSIVOS MOBILE PREMIUM --- */
+@media (max-width: 900px) {
+  .desktop-only-view {
+    display: none !important;
+  }
+
+  .mobile-only-view {
+    display: block !important;
+  }
+
   /* Filtros organizados verticalmente */
   .filters-panel-card {
     padding: 1rem;
@@ -1390,5 +1407,119 @@ body {
   .kanban-card {
     padding: 0.85rem;
     gap: 0.75rem;
+  }
+
+  /* --- CARTÕES COMPACTOS MÓVEIS --- */
+  .mobile-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .mobile-item-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mobile-item-card.match-card {
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(243, 244, 246, 0.4) 100%);
+    border-left: 3px solid var(--accent-blue);
+  }
+
+  .mobile-card-row.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+  }
+
+  .mobile-card-name {
+    font-family: var(--font-display);
+    font-weight: 750;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+  }
+
+  .mobile-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .mobile-card-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+  }
+
+  .detail-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .detail-value {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .detail-value.price {
+    color: var(--accent-gold);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .detail-value.price-blue {
+    color: var(--accent-blue);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .detail-value.score-blue {
+    color: var(--accent-blue);
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .mobile-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 8px;
+  }
+
+  .btn-sm {
+    padding: 0.45rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    flex: 1;
+    justify-content: center;
+    height: 32px;
+  }
+
+  .mobile-card-actions .delete-btn {
+    color: var(--urgency-alta) !important;
+    border-color: rgba(225, 29, 72, 0.25) !important;
+    background-color: rgba(225, 29, 72, 0.03) !important;
+  }
+
+  .mobile-empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2.5rem 1rem;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    background-color: var(--bg-app);
   }
 }

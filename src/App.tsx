@@ -1434,7 +1434,8 @@ function App() {
                 <div className="table-header-bar">
                   <h3 className="table-header-title">Últimos Matches Qualificados</h3>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
+                {/* Visualização em Desktop (Tabela) */}
+                <div className="desktop-only-view" style={{ overflowX: 'auto' }}>
                   <table className="app-table">
                     <thead>
                       <tr>
@@ -1475,6 +1476,48 @@ function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Visualização em Mobile (Cartões Compactos) */}
+                <div className="mobile-only-view">
+                  <div className="mobile-cards-list" style={{ padding: '0' }}>
+                    {allMatches.slice(0, 5).map((match, idx) => (
+                      <div key={idx} className="mobile-item-card match-card">
+                        <div className="mobile-card-row header">
+                          <span className="mobile-card-name">{match.comprador_nome}</span>
+                          <span 
+                            className="badge"
+                            style={{
+                              border: '1px solid',
+                              backgroundColor: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
+                              color: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
+                            }}
+                          >
+                            {match.estado_match}
+                          </span>
+                        </div>
+                        <div className="mobile-card-body">
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Imóvel:</span>
+                            <span className="detail-value">{match.tipologia} em {match.freguesia}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Preço Anunciado:</span>
+                            <span className="detail-value price">{formatCurrency(match.preco_objetivo)}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Compatibilidade:</span>
+                            <span className="detail-value score-blue">{match.match_score}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {allMatches.length === 0 && (
+                      <div className="mobile-empty-state">
+                        Sem interações de matches de momento.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1760,7 +1803,8 @@ function App() {
                     </button>
                   </div>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
+                {/* Visualização em Desktop (Tabela) */}
+                <div className="desktop-only-view" style={{ overflowX: 'auto' }}>
                   <table className="app-table">
                     <thead>
                       <tr>
@@ -1832,6 +1876,72 @@ function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Visualização em Mobile (Cartões Compactos) */}
+                <div className="mobile-only-view">
+                  <div className="mobile-cards-list">
+                    {getFilteredImoveis().map(imovel => (
+                      <div key={imovel.id} className="mobile-item-card">
+                        <div className="mobile-card-row header">
+                          <span className="mobile-card-name">{imovel.proprietario_nome}</span>
+                          <span 
+                            className="badge"
+                            style={{
+                              border: '1px solid',
+                              backgroundColor: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa-bg)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media-bg)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta-bg)' : 'var(--bg-input)',
+                              color: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta)' : 'var(--text-secondary)',
+                            }}
+                          >
+                            {imovel.estado_imovel || 'Ativo'}
+                          </span>
+                        </div>
+                        
+                        <div className="mobile-card-body">
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Contacto:</span>
+                            <span className="detail-value">{imovel.proprietario_contacto}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Tipo:</span>
+                            <span className="detail-value">{imovel.tipo_imovel} ({imovel.tipologia})</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Localização:</span>
+                            <span className="detail-value">{imovel.freguesia}, {imovel.cidade}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Preço Anunciado:</span>
+                            <span className="detail-value price">{formatCurrency(imovel.preco_objetivo)}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Área:</span>
+                            <span className="detail-value">{imovel.area_m2} m²</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Origem:</span>
+                            <span className="detail-value">{imovel.origem_contacto || 'Outro'}</span>
+                          </div>
+                        </div>
+
+                        <div className="mobile-card-actions">
+                          <button onClick={() => startEditImovel(imovel)} className="btn btn-secondary btn-sm">
+                            <Edit2 size={12} />
+                            <span>Editar</span>
+                          </button>
+                          <button onClick={() => handleDeleteImovel(imovel.id)} className="btn btn-secondary btn-sm delete-btn">
+                            <Trash2 size={12} />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {getFilteredImoveis().length === 0 && (
+                      <div className="mobile-empty-state">
+                        Nenhum imóvel corresponde aos filtros selecionados.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1997,7 +2107,8 @@ function App() {
                     </button>
                   </div>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
+                {/* Visualização em Desktop (Tabela) */}
+                <div className="desktop-only-view" style={{ overflowX: 'auto' }}>
                   <table className="app-table">
                     <thead>
                       <tr>
@@ -2087,6 +2198,87 @@ function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Visualização em Mobile (Cartões Compactos) */}
+                <div className="mobile-only-view">
+                  <div className="mobile-cards-list">
+                    {getFilteredCompradores().map(comp => (
+                      <div key={comp.id} className="mobile-item-card">
+                        <div className="mobile-card-row header">
+                          <span className="mobile-card-name">{comp.comprador_nome}</span>
+                          <span 
+                            className="badge"
+                            style={{
+                              border: '1px solid',
+                              backgroundColor: comp.estado_comprador === 'Ativo' ? 'var(--urgency-baixa-bg)' : comp.estado_comprador === 'Negócio Fechado' ? 'var(--accent-purple-bg)' : 'var(--bg-input)',
+                              color: comp.estado_comprador === 'Ativo' ? 'var(--urgency-baixa)' : comp.estado_comprador === 'Negócio Fechado' ? 'var(--accent-purple)' : 'var(--text-secondary)',
+                            }}
+                          >
+                            {comp.estado_comprador || 'Ativo'}
+                          </span>
+                        </div>
+                        
+                        <div className="mobile-card-body">
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Contacto:</span>
+                            <span className="detail-value">{comp.comprador_contacto}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Orçamento Máx:</span>
+                            <span className="detail-value price-blue">{formatCurrency(comp.orcamento_maximo)}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Tipos:</span>
+                            <span className="detail-value">{comp.tipos_imovel_pretendidos.join(', ')}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Tipologias:</span>
+                            <span className="detail-value">{comp.tipologias_pretendidas.join(', ')}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Zonas:</span>
+                            <span className="detail-value">{comp.zonas_pretendidas.join(', ')}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Origem:</span>
+                            <span className="detail-value">{comp.origem_contacto || 'Outro'}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Contacto Efetuado:</span>
+                            <span className="detail-value">
+                              {comp.foi_contactado ? (
+                                <span style={{ color: 'var(--urgency-baixa)', fontWeight: 600 }}>
+                                  Sim {comp.data_contacto && `(${(() => {
+                                    const d = parseSafeDate(comp.data_contacto);
+                                    return d ? d.toLocaleDateString('pt-PT') : '';
+                                  })()})`}
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--urgency-alta)', fontWeight: 600 }}>Pendente</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mobile-card-actions">
+                          <button onClick={() => startEditComprador(comp)} className="btn btn-secondary btn-sm">
+                            <Edit2 size={12} />
+                            <span>Editar</span>
+                          </button>
+                          <button onClick={() => handleDeleteComprador(comp.id)} className="btn btn-secondary btn-sm delete-btn">
+                            <Trash2 size={12} />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {getFilteredCompradores().length === 0 && (
+                      <div className="mobile-empty-state">
+                        Nenhum comprador corresponde aos filtros aplicados.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
