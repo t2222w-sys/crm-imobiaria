@@ -22,7 +22,8 @@ import {
   MapPin,
   Building,
   Heart,
-  TrendingUp
+  TrendingUp,
+  Clock
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL atualizado
@@ -87,9 +88,20 @@ interface Match {
   match_score: number;
 }
 
+// Nova Interface de Atividades
+interface Atividade {
+  id: string;
+  tipos_atividade: string[];
+  data_hora: string;
+  comprador_id: string | null;
+  imovel_id: string | null;
+  notas: string | null;
+  created_at: string;
+}
+
 interface CalendarEvent {
   date: string;
-  type: 'imovel' | 'imovel_update' | 'comprador' | 'comprador_update' | 'contacto' | 'crm';
+  type: 'imovel' | 'imovel_update' | 'comprador' | 'comprador_update' | 'contacto' | 'crm' | 'agenda';
   title: string;
   label: string;
   desc?: string;
@@ -155,11 +167,13 @@ function App() {
   // Estados dos Modais
   const [isImovelModalOpen, setIsImovelModalOpen] = useState(false);
   const [isCompradorModalOpen, setIsCompradorModalOpen] = useState(false);
+  const [isAtividadeModalOpen, setIsAtividadeModalOpen] = useState(false); // Novo
 
   // Dados da Base de Dados
   const [vendedores, setVendedores] = useState<Imovel[]>([]);
   const [compradores, setCompradores] = useState<Comprador[]>([]);
   const [allMatches, setAllMatches] = useState<Match[]>([]);
+  const [atividades, setAtividades] = useState<Atividade[]>([]); // Novo
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Estados de Edição de Registos
@@ -203,6 +217,15 @@ function App() {
   const [cFoiContactado, setCFoiContactado] = useState(false);
   const [cDataContacto, setCDataContacto] = useState('');
 
+  // Formulário de Nova Atividade (Novo)
+  const [actTipos, setActTipos] = useState<string[]>([]);
+  const [actDataHora, setActDataHora] = useState('');
+  const [actCompradorId, setActCompradorId] = useState<string>('');
+  const [actImovelId, setActImovelId] = useState<string>('');
+  const [actNotas, setActNotas] = useState('');
+  const [associarCliente, setAssociarCliente] = useState(false);
+  const [associarImovel, setAssociarImovel] = useState(false);
+
   // Autocomplete Sugestões
   const [concelhoSugestoes, setConcelhoSugestoes] = useState<string[]>([]);
   const [freguesiaSugestoes, setFreguesiaSugestoes] = useState<string[]>([]);
@@ -218,6 +241,36 @@ function App() {
     'Terreno Agrícola',
     'Terreno para Construção'
   ];
+
+  // Tipos de Atividades sugeridas pelo utilizador para conjugação múltipla
+  const tiposAtividadeDisponiveis = [
+    'Visita a Imóvel',
+    'Reunião com Cliente',
+    'Angariação / Prospeção',
+    'Avaliação Imobiliária',
+    'Reportagem Fotográfica / Vídeo',
+    'Assinatura de CPCV',
+    'Escritura / Fecho',
+    'Entrega de Chaves / Vistoria',
+    'Outro'
+  ];
+
+  // --- UTILS DE FORMATAÇÃO DE DATA LOCAL (Prevenção de fuso horário / dia seguinte) ---
+  
+  // Retorna YYYY-MM-DD em fuso horário local
+  const getLocalDateString = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Converte data ISO UTC do Supabase para YYYY-MM-DD local
+  const getLocalDateFromISO = (isoStr: string) => {
+    if (!isoStr) return '';
+    const date = new Date(isoStr);
+    return getLocalDateString(date);
+  };
 
   // Efeitos de Inicialização
   useEffect(() => {
@@ -252,7 +305,7 @@ function App() {
       if (cErr) throw cErr;
       setCompradores(cData || []);
 
-      // Buscar todos os matches possíveis de todos os compradores
+      // Buscar matches
       const { data: mData, error: mErr } = await supabase
         .from('view_matches_compradores_imoveis')
         .select('*')
@@ -260,6 +313,16 @@ function App() {
 
       if (mErr) throw mErr;
       setAllMatches(mData || []);
+
+      // Buscar atividades da agenda (Novo)
+      const { data: actData, error: actErr } = await supabase
+        .from('atividades_agenda')
+        .select('*')
+        .order('data_hora', { ascending: true });
+
+      if (actErr) throw actErr;
+      setAtividades(actData || []);
+
     } catch (err: any) {
       showToast('Erro ao obter dados: ' + err.message, 'error');
     }
@@ -463,6 +526,64 @@ function App() {
     }
   };
 
+  // Tratar Submissão de Agendamento de Atividade (Novo)
+  const handleAddAtividade = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (actTipos.length === 0 || !actDataHora) {
+      showToast('Selecione pelo menos um tipo de atividade e configure a data e hora.', 'error');
+      return;
+    }
+
+    const payload = {
+      tipos_atividade: actTipos,
+      data_hora: new Date(actDataHora).toISOString(),
+      comprador_id: associarCliente && actCompradorId ? actCompradorId : null,
+      imovel_id: associarImovel && actImovelId ? actImovelId : null,
+      notas: actNotas || null
+    };
+
+    try {
+      const { error } = await supabase
+        .from('atividades_agenda')
+        .insert([payload]);
+
+      if (error) throw error;
+      showToast('Atividade agendada com sucesso!');
+      
+      // Reset
+      setActTipos([]);
+      setActDataHora('');
+      setActCompradorId('');
+      setActImovelId('');
+      setActNotas('');
+      setAssociarCliente(false);
+      setAssociarImovel(false);
+      setIsAtividadeModalOpen(false);
+
+      fetchData();
+    } catch (err: any) {
+      showToast('Erro ao agendar atividade: ' + err.message, 'error');
+    }
+  };
+
+  // Eliminar Atividade (Novo)
+  const handleDeleteAtividade = async (id: string) => {
+    if (!window.confirm('Eliminar esta atividade permanentemente da agenda?')) return;
+    try {
+      const { error } = await supabase
+        .from('atividades_agenda')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showToast('Atividade removida com sucesso.');
+      fetchData();
+    } catch (err: any) {
+      showToast('Erro ao remover atividade: ' + err.message, 'error');
+    }
+  };
+
   // Ativar modo de edição para Imóvel
   const startEditImovel = (imovel: Imovel) => {
     setEditingImovelId(imovel.id);
@@ -528,8 +649,8 @@ function App() {
             comprador_id: compradorId,
             imovel_id: imovelId,
             estado: estado,
-            notes_match: notas, // Mapeado para notas_match
-            notas: notas, // Mapeado para notas por segurança
+            notes_match: notas,
+            notas: notas,
             updated_at: new Date().toISOString()
           },
           { onConflict: 'comprador_id,imovel_id' }
@@ -626,16 +747,26 @@ function App() {
     }
   };
 
+  // Toggle múltiplo de tipos na mesma atividade (Novo)
+  const handleToggleActTipo = (tipo: string) => {
+    if (actTipos.includes(tipo)) {
+      setActTipos(actTipos.filter(t => t !== tipo));
+    } else {
+      setActTipos([...actTipos, tipo]);
+    }
+  };
+
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
   };
 
-  // --- CALENDÁRIO ---
+  // --- CALENDÁRIO COM DATAS CORRIGIDAS (LOCAL TIME) ---
   const getCalendarEvents = (): CalendarEvent[] => {
     const events: CalendarEvent[] = [];
 
+    // 1. Registos de Imóveis (Corrigido para Local)
     vendedores.forEach(v => {
-      const d = v.created_at.split('T')[0];
+      const d = getLocalDateFromISO(v.created_at);
       events.push({
         date: d,
         type: 'imovel',
@@ -645,7 +776,7 @@ function App() {
         originalId: v.id
       });
 
-      const u = v.updated_at.split('T')[0];
+      const u = getLocalDateFromISO(v.updated_at);
       if (u !== d) {
         events.push({
           date: u,
@@ -658,8 +789,9 @@ function App() {
       }
     });
 
+    // 2. Registos de Compradores (Corrigido para Local)
     compradores.forEach(c => {
-      const d = c.created_at.split('T')[0];
+      const d = getLocalDateFromISO(c.created_at);
       events.push({
         date: d,
         type: 'comprador',
@@ -669,7 +801,7 @@ function App() {
         originalId: c.id
       });
 
-      const u = c.updated_at.split('T')[0];
+      const u = getLocalDateFromISO(c.updated_at);
       if (u !== d) {
         events.push({
           date: u,
@@ -682,7 +814,7 @@ function App() {
       }
 
       if (c.foi_contactado && c.data_contacto) {
-        const dc = c.data_contacto.split('T')[0];
+        const dc = getLocalDateFromISO(c.data_contacto);
         events.push({
           date: dc,
           type: 'contacto',
@@ -692,6 +824,27 @@ function App() {
           originalId: c.id
         });
       }
+    });
+
+    // 3. Atividades da Agenda Criadas (Corrigido para Local)
+    atividades.forEach(act => {
+      const d = getLocalDateFromISO(act.data_hora);
+      
+      const comp = compradores.find(c => c.id === act.comprador_id);
+      const imov = vendedores.find(v => v.id === act.imovel_id);
+      
+      const labels = [];
+      if (comp) labels.push(`Cliente: ${comp.comprador_nome}`);
+      if (imov) labels.push(`Imóvel: ${imov.tipo_imovel} (${imov.tipologia})`);
+
+      events.push({
+        date: d,
+        type: 'agenda',
+        title: act.tipos_atividade.join(' + '),
+        label: labels.length > 0 ? labels.join(' | ') : 'Sem entidades associadas',
+        desc: act.notas || undefined,
+        originalId: act.id
+      });
     });
 
     return events;
@@ -730,12 +883,13 @@ function App() {
 
     for (let i = 1; i <= totalDays; i++) {
       const cellDate = new Date(year, month, i);
-      const cellDateStr = cellDate.toISOString().split('T')[0];
+      const cellDateStr = getLocalDateString(cellDate); // Corrigido para Local
 
       const dayEvents = calendarEvents.filter(e => e.date === cellDateStr);
       const isToday = new Date().toDateString() === cellDate.toDateString();
       const isSelected = selectedDay.toDateString() === cellDate.toDateString();
 
+      // Dots personalizados por tipo de atividade
       cells.push(
         <div 
           key={`current-${i}`} 
@@ -745,7 +899,11 @@ function App() {
           <span className="calendar-day-num">{i}</span>
           <div className="calendar-dots-container">
             {dayEvents.slice(0, 4).map((evt, idx) => (
-              <div key={idx} className={`calendar-event-dot dot-${evt.type}`} title={evt.title} />
+              <div 
+                key={idx} 
+                className={`calendar-event-dot dot-${evt.type === 'agenda' ? 'crm' : evt.type}`} 
+                title={evt.title} 
+              />
             ))}
           </div>
         </div>
@@ -755,7 +913,7 @@ function App() {
     return cells;
   };
 
-  const selectedDayStr = selectedDay.toISOString().split('T')[0];
+  const selectedDayStr = getLocalDateString(selectedDay); // Corrigido para Local
   const selectedDayEvents = calendarEvents.filter(e => e.date === selectedDayStr);
 
   const monthNames = [
@@ -763,13 +921,10 @@ function App() {
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
 
-  // Agrupamento do Kanban baseados nas interações ativas (Matches)
-  // Colunas: Pendente, Visita Agendada, Proposta Apresentada, Negócio Fechado
   const getColMatches = (estado: string) => {
     return allMatches.filter(m => m.estado_match === estado);
   };
 
-  // Estatísticas do Dashboard
   const totalVolumeNegocios = allMatches
     .filter(m => m.estado_match === 'Negócio Fechado')
     .reduce((acc, m) => acc + Number(m.preco_objetivo), 0);
@@ -936,7 +1091,7 @@ function App() {
               {/* Tabela de Atividades Recentes */}
               <div className="data-table-card" style={{ marginTop: 0 }}>
                 <div className="table-header-bar">
-                  <h3 className="table-header-title">Ultimos Matches Qualificados</h3>
+                  <h3 className="table-header-title">Últimos Matches Qualificados</h3>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="app-table">
@@ -1278,15 +1433,17 @@ function App() {
             </div>
           )}
 
-          {/* TAB 5: CALENDÁRIO */}
+          {/* TAB 5: CALENDÁRIO REDESENHADO (WIDGET COMPACTO + AGENDA) */}
           {activeMenu === 'calendario' && (
             <div className="calendar-wrapper">
-              <div className="calendar-main-card">
+              
+              {/* Calendário Compacto estilo Widget */}
+              <div className="calendar-main-card" style={{ maxWidth: '340px' }}>
                 <div className="calendar-header-nav">
                   <button onClick={prevMonth} className="btn-quick-action" style={{ backgroundColor: 'var(--bg-input)' }}>
                     <ChevronLeft size={16} />
                   </button>
-                  <h2 className="calendar-month-title">
+                  <h2 className="calendar-month-title" style={{ fontSize: '1.1rem' }}>
                     {monthNames[calendarDate.getMonth()]} {calendarDate.getFullYear()}
                   </h2>
                   <button onClick={nextMonth} className="btn-quick-action" style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -1294,7 +1451,7 @@ function App() {
                   </button>
                 </div>
 
-                <div className="calendar-week-days">
+                <div className="calendar-week-days" style={{ fontSize: '0.65rem', marginBottom: '0.5rem', paddingBottom: '0.5rem' }}>
                   <div>Seg</div>
                   <div>Ter</div>
                   <div>Qua</div>
@@ -1304,41 +1461,112 @@ function App() {
                   <div>Dom</div>
                 </div>
 
-                <div className="calendar-grid">
+                <div className="calendar-grid" style={{ gap: '4px' }}>
                   {renderCalendarDays()}
+                </div>
+
+                {/* Legendas dos Dots */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '1.25rem', fontSize: '0.65rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div className="calendar-event-dot dot-imovel" /> <span>Registo</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div className="calendar-event-dot dot-comprador" /> <span>Comprador</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div className="calendar-event-dot dot-contacto" /> <span>Contacto</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div className="calendar-event-dot dot-crm" /> <span>Atividade</span>
+                  </div>
                 </div>
               </div>
 
+              {/* Agenda Expandida de Atividades à Direita */}
               <div className="calendar-activities-card">
-                <h3 className="card-title" style={{ fontSize: '1.1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-                  Atividades em: {selectedDay.toLocaleDateString('pt-PT')}
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                  <h3 className="card-title" style={{ fontSize: '1.1rem' }}>
+                    Agenda: {selectedDay.toLocaleDateString('pt-PT')}
+                  </h3>
+                  <button 
+                    className="btn btn-primary"
+                    style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
+                    onClick={() => {
+                      setActTipos([]);
+                      setActNotas('');
+                      setAssociarCliente(false);
+                      setAssociarImovel(false);
+                      
+                      // Configurar data de hoje local no datetime-local
+                      const offset = selectedDay.getTimezoneOffset() * 60000;
+                      const dateLocal = new Date(selectedDay.getTime() - offset).toISOString().slice(0, 16);
+                      setActDataHora(dateLocal);
+                      
+                      setIsAtividadeModalOpen(true);
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>Agendar Tarefa</span>
+                  </button>
+                </div>
 
                 <div className="calendar-activities-list">
                   {selectedDayEvents.length > 0 ? (
                     selectedDayEvents.map((evt, idx) => (
-                      <div key={idx} className="calendar-activity-item">
-                        <div className={`activity-icon-box activity-icon-${evt.type.includes('imovel') ? 'imovel' : evt.type.includes('comprador') ? 'comprador' : evt.type}`}>
-                          {evt.type.includes('imovel') ? <Home size={16} /> : <Users size={16} />}
+                      <div key={idx} className="calendar-activity-item" style={{ position: 'relative' }}>
+                        <div className={`activity-icon-box activity-icon-${evt.type === 'agenda' ? 'crm' : evt.type.includes('imovel') ? 'imovel' : evt.type.includes('comprador') ? 'comprador' : evt.type}`}>
+                          {evt.type === 'agenda' && <Clock size={16} />}
+                          {evt.type.includes('imovel') && <Home size={16} />}
+                          {evt.type.includes('comprador') && <Users size={16} />}
+                          {evt.type === 'contacto' && <Phone size={16} />}
                         </div>
-                        <div className="activity-content">
-                          <span className="activity-title">{evt.title}</span>
-                          <span className="activity-meta">{evt.label}</span>
-                          {evt.desc && <span className="activity-desc">{evt.desc}</span>}
+                        <div className="activity-content" style={{ paddingRight: '2.5rem' }}>
+                          <span className="activity-title" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
+                            {evt.title}
+                          </span>
+                          <span className="activity-meta" style={{ fontSize: '0.75rem', marginTop: '2px' }}>
+                            {evt.label}
+                          </span>
+                          {evt.desc && (
+                            <span className="activity-desc" style={{ fontStyle: 'italic', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                              {evt.desc}
+                            </span>
+                          )}
                         </div>
+
+                        {/* Botão para eliminar tarefas criadas manualmente */}
+                        {evt.type === 'agenda' && (
+                          <button 
+                            onClick={() => handleDeleteAtividade(evt.originalId)}
+                            className="btn-close-modal"
+                            style={{ 
+                              position: 'absolute', 
+                              right: '12px', 
+                              top: '12px', 
+                              border: 'none', 
+                              background: 'none', 
+                              color: 'var(--text-muted)', 
+                              cursor: 'pointer' 
+                            }}
+                            title="Eliminar atividade"
+                          >
+                            <Trash2 size={15} style={{ color: 'var(--urgency-alta)' }} />
+                          </button>
+                        )}
                       </div>
                     ))
                   ) : (
-                    <div className="empty-state" style={{ padding: '2rem 1rem', borderStyle: 'solid' }}>
+                    <div className="empty-state" style={{ padding: '3rem 1rem', borderStyle: 'solid' }}>
                       <Calendar className="empty-state-icon" />
-                      <div className="empty-state-title" style={{ fontSize: '0.95rem' }}>Sem Atividades</div>
+                      <div className="empty-state-title" style={{ fontSize: '0.95rem' }}>Agenda Livre</div>
                       <div className="empty-state-desc" style={{ fontSize: '0.8rem' }}>
-                        Nenhum evento agendado para este dia.
+                        Nenhuma tarefa ou registo agendado para este dia. Clica em "Agendar Tarefa".
                       </div>
                     </div>
                   )}
                 </div>
               </div>
+
             </div>
           )}
 
@@ -1371,7 +1599,7 @@ function App() {
             </div>
           )}
 
-          {/* Banner Promocional Inferior (Design da Referência) */}
+          {/* Banner Promocional Inferior */}
           <div className="bottom-banner">
             <div className="banner-content">
               <Sparkles size={20} style={{ color: 'var(--accent-pink)' }} />
@@ -1826,6 +2054,107 @@ function App() {
         </div>
       )}
 
+      {/* MODAL 3: AGENDAR NOVA ATIVIDADE (Novo) */}
+      {isAtividadeModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content-card">
+            <div className="modal-header">
+              <h3 className="modal-title">Agendar Nova Atividade</h3>
+              <button className="modal-close-btn" onClick={() => setIsAtividadeModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleAddAtividade} className="modal-body form-grid">
+              
+              <div className="form-group form-group-full">
+                <label>Tipos de Atividade* (Podes conjugar várias)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                  {tiposAtividadeDisponiveis.map(tipo => (
+                    <div 
+                      key={tipo}
+                      className="badge"
+                      style={{
+                        padding: '6px 12px',
+                        cursor: 'pointer',
+                        border: '1px solid',
+                        borderColor: actTipos.includes(tipo) ? 'var(--text-primary)' : 'var(--border-color)',
+                        backgroundColor: actTipos.includes(tipo) ? 'var(--text-primary)' : 'var(--bg-app)',
+                        color: actTipos.includes(tipo) ? 'white' : 'var(--text-secondary)'
+                      }}
+                      onClick={() => handleToggleActTipo(tipo)}
+                    >
+                      {tipo}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>Data e Hora Agendada*</label>
+                <input 
+                  type="datetime-local" 
+                  value={actDataHora}
+                  onChange={(e) => setActDataHora(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* BOTOES DE ASSOCIAÇÃO RAPIDA (Selecionar um ou outro, ou ambos) */}
+              <div className="form-group form-group-full" style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '0.85rem 0', margin: '4px 0' }}>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={associarCliente} onChange={e => setAssociarCliente(e.target.checked)} />
+                  Associar Comprador
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={associarImovel} onChange={e => setAssociarImovel(e.target.checked)} />
+                  Associar Imóvel
+                </label>
+              </div>
+
+              {associarCliente && (
+                <div className="form-group form-group-full" style={{ animation: 'slideUp 0.15s ease' }}>
+                  <label>Comprador / Lead</label>
+                  <select value={actCompradorId} onChange={e => setActCompradorId(e.target.value)} required={associarCliente}>
+                    <option value="">-- Selecione Comprador --</option>
+                    {compradores.map(c => (
+                      <option key={c.id} value={c.id}>{c.comprador_nome} ({c.comprador_contacto})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {associarImovel && (
+                <div className="form-group form-group-full" style={{ animation: 'slideUp 0.15s ease' }}>
+                  <label>Imóvel / Vendedor</label>
+                  <select value={actImovelId} onChange={e => setActImovelId(e.target.value)} required={associarImovel}>
+                    <option value="">-- Selecione Imóvel --</option>
+                    {vendedores.map(v => (
+                      <option key={v.id} value={v.id}>{v.tipo_imovel} ({v.tipologia}) - Prop: {v.proprietario_nome}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="form-group form-group-full">
+                <label>Notas / Instruções da Tarefa</label>
+                <textarea 
+                  rows={2} 
+                  value={actNotas}
+                  onChange={(e) => setActNotas(e.target.value)}
+                  placeholder="Escreve detalhes da reunião, CPCV, etc..."
+                />
+              </div>
+
+              <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsAtividadeModalOpen(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary">Agendar</button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -1846,7 +2175,6 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
   
   const [localNotas, setLocalNotas] = useState(match.notas_match || '');
 
-  // Atualizar o input se as notas mudarem no Supabase
   useEffect(() => {
     setLocalNotas(match.notas_match || '');
   }, [match.notas_match]);
@@ -1859,7 +2187,6 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
     return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
   };
 
-  // Determinar o badge do perfil baseado na urgência e orçamento
   const getProfileClassAndLabel = () => {
     if (match.preco_objetivo > 450000) {
       return { class: 'luxury', label: 'LUXO' };
@@ -1905,7 +2232,7 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
         <span className="card-budget">{formatCurrency(match.preco_objetivo)}</span>
       </div>
 
-      {/* Painel do Imóvel de Match (Interested In) */}
+      {/* Painel do Imóvel de Match */}
       <div className="card-interested-box">
         <div className="interested-thumbnail">
           <Building size={18} />
