@@ -651,7 +651,18 @@ function App() {
     
     if (isApiSupported) {
       try {
-        const props = ['name', 'tel', 'email'];
+        // Verificar as propriedades suportadas dinamicamente pelo dispositivo móvel
+        // @ts-ignore
+        const supportedProperties = await navigator.contacts.getProperties();
+        const props = [];
+        if (supportedProperties.includes('name')) props.push('name');
+        if (supportedProperties.includes('tel')) props.push('tel');
+        
+        // Se as principais não estiverem explícitas nas suportadas, garantir pedido mínimo
+        if (props.length === 0) {
+          props.push('name');
+        }
+
         const opts = { multiple: false };
         // @ts-ignore
         const contacts = await navigator.contacts.select(props, opts);
@@ -660,6 +671,7 @@ function App() {
           const contact = contacts[0];
           const nome = contact.name && contact.name[0] ? contact.name[0] : '';
           const telefone = contact.tel && contact.tel[0] ? contact.tel[0] : '';
+          // email opcional
           const email = contact.email && contact.email[0] ? contact.email[0] : '';
           
           setImportedContact({ nome, telefone, email });
@@ -667,7 +679,22 @@ function App() {
           setIsImportDecisionModalOpen(true);
         }
       } catch (err: any) {
-        showToast('Erro ao importar: ' + err.message, 'error');
+        const errMsg = err.message || '';
+        const isCancellation = 
+          errMsg.toLowerCase().includes('cancel') || 
+          err.name === 'AbortError' || 
+          err.name === 'CancellationError';
+
+        // Se o utilizador cancelou a seleção voluntariamente, ignoramos em silêncio
+        if (isCancellation) {
+          console.log('Operação cancelada pelo utilizador.');
+          return;
+        }
+
+        // Em caso de erro de permissão ou incompatibilidade profunda no telemóvel,
+        // reencaminhamos o utilizador para a lista simulada
+        console.warn('Erro ao usar API de Contactos nativa, a abrir simulação: ', err);
+        setIsSimulatedContactsModalOpen(true);
       }
     } else {
       setIsSimulatedContactsModalOpen(true);
