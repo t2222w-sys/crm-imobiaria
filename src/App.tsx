@@ -23,10 +23,11 @@ import {
   Building,
   Heart,
   TrendingUp,
-  Clock
+  Clock,
+  Smartphone
 } from 'lucide-react';
 
-// Interfaces baseadas no esquema SQL atualizado
+// Interfaces baseadas no esquema SQL
 interface Imovel {
   id: string;
   proprietario_nome: string;
@@ -49,8 +50,8 @@ interface Imovel {
   observacoes?: string;
   created_at: string;
   updated_at: string;
-  estado_imovel: string; // Novo
-  origem_contacto: string; // Novo
+  estado_imovel: string;
+  origem_contacto: string;
 }
 
 interface Comprador {
@@ -70,8 +71,8 @@ interface Comprador {
   data_contacto?: string | null;
   created_at: string;
   updated_at: string;
-  estado_comprador: string; // Novo
-  origem_contacto: string; // Novo
+  estado_comprador: string;
+  origem_contacto: string;
 }
 
 interface Match {
@@ -92,7 +93,6 @@ interface Match {
   match_score: number;
 }
 
-// Interface de Atividades
 interface Atividade {
   id: string;
   tipos_atividade: string[];
@@ -118,8 +118,25 @@ interface Toast {
   type: 'success' | 'error';
 }
 
+// --- UTILS DE FORMATAÇÃO E DATAS GLOBAIS (Nível de Ficheiro para escopo livre) ---
+const formatCurrency = (val: number) => {
+  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+};
+
+const getLocalDateString = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getLocalDateFromISO = (isoStr: string) => {
+  if (!isoStr) return '';
+  const date = new Date(isoStr);
+  return getLocalDateString(date);
+};
+
 function App() {
-  // Validação de variáveis de ambiente em produção (Vercel)
   if (!isSupabaseConfigured) {
     return (
       <div style={{
@@ -165,26 +182,32 @@ function App() {
     );
   }
 
-  // Navegação da Sidebar (SaaS Style)
+  // Navegação
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'definicoes'>('kanban');
 
-  // Estados dos Modais
+  // Modais Gerais
   const [isImovelModalOpen, setIsImovelModalOpen] = useState(false);
   const [isCompradorModalOpen, setIsCompradorModalOpen] = useState(false);
   const [isAtividadeModalOpen, setIsAtividadeModalOpen] = useState(false);
 
-  // Dados da Base de Dados
+  // Estados para Importação de Contactos
+  const [isImportDecisionModalOpen, setIsImportDecisionModalOpen] = useState(false);
+  const [isSimulatedContactsModalOpen, setIsSimulatedContactsModalOpen] = useState(false);
+  const [importedContact, setImportedContact] = useState<{ nome: string; telefone: string; email?: string } | null>(null);
+  const [associationMode, setAssociationMode] = useState<'decision' | 'associate-imovel' | 'associate-comprador'>('decision');
+
+  // Dados do Supabase
   const [vendedores, setVendedores] = useState<Imovel[]>([]);
   const [compradores, setCompradores] = useState<Comprador[]>([]);
   const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Estados de Edição de Registos
+  // Estados de Edição
   const [editingImovelId, setEditingImovelId] = useState<string | null>(null);
   const [editingCompradorId, setEditingCompradorId] = useState<string | null>(null);
 
-  // --- FILTROS & ORDENAÇÃO DE IMÓVEIS (PROPRIETÁRIOS) ---
+  // Filtros Imóveis
   const [fImovelPesquisa, setFImovelPesquisa] = useState('');
   const [fImovelTipos, setFImovelTipos] = useState<string[]>([]);
   const [fImovelTipologias, setFImovelTipologias] = useState<string[]>([]);
@@ -193,7 +216,7 @@ function App() {
   const [fImovelOrigem, setFImovelOrigem] = useState<string>('Todos');
   const [sortImoveisBy, setSortImoveisBy] = useState<string>('data-desc');
 
-  // --- FILTROS & ORDENAÇÃO DE COMPRADORES ---
+  // Filtros Compradores
   const [fCompradorPesquisa, setFCompradorPesquisa] = useState('');
   const [fCompradorTipos, setFCompradorTipos] = useState<string[]>([]);
   const [fCompradorTipologias, setFCompradorTipologias] = useState<string[]>([]);
@@ -202,7 +225,7 @@ function App() {
   const [fCompradorOrigem, setFCompradorOrigem] = useState<string>('Todos');
   const [sortCompradoresBy, setSortCompradoresBy] = useState<string>('data-desc');
 
-  // Controlos de Dropdowns de Filtros
+  // Controlos de Popovers de Filtros
   const [showImovelTiposDropdown, setShowImovelTiposDropdown] = useState(false);
   const [showImovelTipologiasDropdown, setShowImovelTipologiasDropdown] = useState(false);
   const [showCompradorTiposDropdown, setShowCompradorTiposDropdown] = useState(false);
@@ -228,8 +251,8 @@ function App() {
   const [vArrecadacao, setVArrecadacao] = useState(false);
   const [vUrgencia, setVUrgencia] = useState<'Alta' | 'Media' | 'Baixa'>('Media');
   const [vObs, setVObs] = useState('');
-  const [vEstadoImovel, setVEstadoImovel] = useState('Ativo'); // Novo
-  const [vOrigemContacto, setVOrigemContacto] = useState('Outro'); // Novo
+  const [vEstadoImovel, setVEstadoImovel] = useState('Ativo');
+  const [vOrigemContacto, setVOrigemContacto] = useState('Outro');
 
   // Lead / Comprador
   const [cNome, setCNome] = useState('');
@@ -246,10 +269,10 @@ function App() {
   const [cObs, setCObs] = useState('');
   const [cFoiContactado, setCFoiContactado] = useState(false);
   const [cDataContacto, setCDataContacto] = useState('');
-  const [cEstadoComprador, setCEstadoComprador] = useState('Ativo'); // Novo
-  const [cOrigemContacto, setCOrigemContacto] = useState('Outro'); // Novo
+  const [cEstadoComprador, setCEstadoComprador] = useState('Ativo');
+  const [cOrigemContacto, setCOrigemContacto] = useState('Outro');
 
-  // Formulário de Nova Atividade
+  // Atividade
   const [actTipos, setActTipos] = useState<string[]>([]);
   const [actDataHora, setActDataHora] = useState('');
   const [actCompradorId, setActCompradorId] = useState<string>('');
@@ -258,7 +281,7 @@ function App() {
   const [associarCliente, setAssociarCliente] = useState(false);
   const [associarImovel, setAssociarImovel] = useState(false);
 
-  // Autocomplete Sugestões
+  // Sugestões
   const [concelhoSugestoes, setConcelhoSugestoes] = useState<string[]>([]);
   const [freguesiaSugestoes, setFreguesiaSugestoes] = useState<string[]>([]);
 
@@ -274,7 +297,6 @@ function App() {
     'Terreno para Construção'
   ];
 
-  // Origens de Contacto (Lead Sources) propostas
   const origensDisponiveis = [
     'Idealista',
     'Imovirtual',
@@ -291,7 +313,6 @@ function App() {
     'Outro'
   ];
 
-  // Tipos de Atividades
   const tiposAtividadeDisponiveis = [
     'Visita a Imóvel',
     'Reunião com Cliente',
@@ -304,24 +325,13 @@ function App() {
     'Outro'
   ];
 
-  // --- UTILS DE FORMATAÇÃO DE DATA LOCAL ---
-  const getLocalDateString = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getLocalDateFromISO = (isoStr: string) => {
-    if (!isoStr) return '';
-    const date = new Date(isoStr);
-    return getLocalDateString(date);
-  };
-
-  // Efeitos de Inicialização
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // Contactos simulados para o desktop (Mock List)
+  const contactosSimulados = [
+    { nome: 'Ana Rodrigues', telefone: '915678234', email: 'ana.rodrigues@email.pt' },
+    { nome: 'Rui Mendes', telefone: '934890123', email: 'rui.mendes@email.pt' },
+    { nome: 'Sofia Teixeira', telefone: '967123456', email: 'sofia.teixeira@email.pt' },
+    { nome: 'Carlos Antunes', telefone: '921987654', email: 'carlos.antunes@email.pt' }
+  ];
 
   // Fechar dropdowns de filtros ao clicar fora
   useEffect(() => {
@@ -335,7 +345,6 @@ function App() {
     return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
-  // Toasts Helper
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
@@ -344,7 +353,7 @@ function App() {
     }, 4000);
   };
 
-  // Buscar dados base do Supabase
+  // Fetch
   const fetchData = async () => {
     try {
       const { data: vData, error: vErr } = await supabase
@@ -363,7 +372,6 @@ function App() {
       if (cErr) throw cErr;
       setCompradores(cData || []);
 
-      // Buscar matches
       const { data: mData, error: mErr } = await supabase
         .from('view_matches_compradores_imoveis')
         .select('*')
@@ -372,7 +380,6 @@ function App() {
       if (mErr) throw mErr;
       setAllMatches(mData || []);
 
-      // Buscar atividades
       const { data: actData, error: actErr } = await supabase
         .from('atividades_agenda')
         .select('*')
@@ -386,7 +393,7 @@ function App() {
     }
   };
 
-  // Autocomplete Concelhos e Freguesias
+  // Autocomplete
   const fetchConcelhos = async (pesquisa: string) => {
     if (pesquisa.trim().length < 2) {
       setConcelhoSugestoes([]);
@@ -433,12 +440,12 @@ function App() {
     }
   };
 
-  // Tratar submissão de Novo Imóvel (ou Edição)
+  // Submissões
   const handleAddImovel = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!vNome.trim() || !vContacto.trim() || !vPrecoObj || !vPrecoMin || !vArea || !vRua.trim() || !vCidade.trim() || !vFreguesia.trim()) {
-      showToast('Por favor, preenche os campos obrigatórios do imóvel.', 'error');
+      showToast('Preenche todos os campos obrigatórios.', 'error');
       return;
     }
 
@@ -446,7 +453,7 @@ function App() {
     const pMin = parseFloat(vPrecoMin);
 
     if (pMin > pObj) {
-      showToast('O preço mínimo não pode ser superior ao preço objetivo.', 'error');
+      showToast('O preço mínimo não pode exceder o preço objetivo.', 'error');
       return;
     }
 
@@ -469,8 +476,8 @@ function App() {
       tem_arrecadacao: vArrecadacao,
       urgencia: vUrgencia,
       observacoes: vObs || null,
-      estado_imovel: vEstadoImovel, // Novo
-      origem_contacto: vOrigemContacto, // Novo
+      estado_imovel: vEstadoImovel,
+      origem_contacto: vOrigemContacto,
       updated_at: new Date().toISOString()
     };
 
@@ -490,10 +497,10 @@ function App() {
           .insert([imovelPayload]);
 
         if (error) throw error;
-        showToast('Imóvel adicionado com sucesso!');
+        showToast('Imóvel adicionado!');
       }
       
-      // Limpar formulário
+      // Reset
       setVNome('');
       setVContacto('');
       setVTipologia('T2');
@@ -520,7 +527,6 @@ function App() {
     }
   };
 
-  // Tratar submissão de Novo Comprador (ou Edição)
   const handleAddComprador = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -543,8 +549,8 @@ function App() {
       observacoes: cObs || null,
       foi_contactado: cFoiContactado,
       data_contacto: cFoiContactado && cDataContacto ? new Date(cDataContacto).toISOString() : null,
-      estado_comprador: cEstadoComprador, // Novo
-      origem_contacto: cOrigemContacto, // Novo
+      estado_comprador: cEstadoComprador,
+      origem_contacto: cOrigemContacto,
       updated_at: new Date().toISOString()
     };
 
@@ -567,7 +573,7 @@ function App() {
         showToast('Lead de comprador registada!');
       }
 
-      // Limpar formulário
+      // Reset
       setCNome('');
       setCContacto('');
       setCOrcamento('');
@@ -591,12 +597,11 @@ function App() {
     }
   };
 
-  // Tratar Agendamento de Atividade
   const handleAddAtividade = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (actTipos.length === 0 || !actDataHora) {
-      showToast('Selecione pelo menos um tipo de atividade.', 'error');
+      showToast('Selecione pelo menos uma atividade e a hora.', 'error');
       return;
     }
 
@@ -624,12 +629,12 @@ function App() {
 
       fetchData();
     } catch (err: any) {
-      showToast('Erro ao agendar atividade: ' + err.message, 'error');
+      showToast('Erro ao agendar: ' + err.message, 'error');
     }
   };
 
   const handleDeleteAtividade = async (id: string) => {
-    if (!window.confirm('Eliminar esta atividade da agenda?')) return;
+    if (!window.confirm('Eliminar atividade da agenda?')) return;
     try {
       const { error } = await supabase.from('atividades_agenda').delete().eq('id', id);
       if (error) throw error;
@@ -640,7 +645,87 @@ function App() {
     }
   };
 
-  // Ativar modo de edição para Imóvel
+  // --- LÓGICA DE IMPORTAÇÃO DE CONTACTOS ---
+  const handleImportContacto = async () => {
+    const isApiSupported = 'contacts' in navigator && 'ContactsManager' in window;
+    
+    if (isApiSupported) {
+      try {
+        const props = ['name', 'tel', 'email'];
+        const opts = { multiple: false };
+        // @ts-ignore
+        const contacts = await navigator.contacts.select(props, opts);
+        
+        if (contacts && contacts.length > 0) {
+          const contact = contacts[0];
+          const nome = contact.name && contact.name[0] ? contact.name[0] : '';
+          const telefone = contact.tel && contact.tel[0] ? contact.tel[0] : '';
+          const email = contact.email && contact.email[0] ? contact.email[0] : '';
+          
+          setImportedContact({ nome, telefone, email });
+          setAssociationMode('decision');
+          setIsImportDecisionModalOpen(true);
+        }
+      } catch (err: any) {
+        showToast('Erro ao importar: ' + err.message, 'error');
+      }
+    } else {
+      setIsSimulatedContactsModalOpen(true);
+    }
+  };
+
+  const handleSelectSimulatedContact = (contact: { nome: string; telefone: string; email: string }) => {
+    setImportedContact(contact);
+    setIsSimulatedContactsModalOpen(false);
+    setAssociationMode('decision');
+    setIsImportDecisionModalOpen(true);
+  };
+
+  const handleAssociateToImovel = async (imovelId: string) => {
+    if (!importedContact) return;
+    try {
+      const { error } = await supabase
+        .from('vendedores_imoveis')
+        .update({
+          proprietario_nome: importedContact.nome,
+          proprietario_contacto: importedContact.telefone,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', imovelId);
+
+      if (error) throw error;
+      showToast('Proprietário do imóvel atualizado!');
+      setIsImportDecisionModalOpen(false);
+      setImportedContact(null);
+      fetchData();
+    } catch (err: any) {
+      showToast('Erro ao associar: ' + err.message, 'error');
+    }
+  };
+
+  const handleAssociateToComprador = async (compradorId: string) => {
+    if (!importedContact) return;
+    try {
+      const { error } = await supabase
+        .from('compradores_leads')
+        .update({
+          comprador_nome: importedContact.nome,
+          comprador_contacto: importedContact.telefone,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', compradorId);
+
+      if (error) throw error;
+      showToast('Contacto do comprador atualizado!');
+      setIsImportDecisionModalOpen(false);
+      setImportedContact(null);
+      fetchData();
+    } catch (err: any) {
+      showToast('Erro ao associar: ' + err.message, 'error');
+    }
+  };
+
+  // Edição
   const startEditImovel = (imovel: Imovel) => {
     setEditingImovelId(imovel.id);
     
@@ -662,13 +747,12 @@ function App() {
     setVArrecadacao(imovel.tem_arrecadacao);
     setVUrgencia(imovel.urgencia);
     setVObs(imovel.observacoes || '');
-    setVEstadoImovel(imovel.estado_imovel || 'Ativo'); // Novo
-    setVOrigemContacto(imovel.origem_contacto || 'Outro'); // Novo
+    setVEstadoImovel(imovel.estado_imovel || 'Ativo');
+    setVOrigemContacto(imovel.origem_contacto || 'Outro');
 
     setIsImovelModalOpen(true);
   };
 
-  // Ativar modo de edição para Comprador
   const startEditComprador = (comprador: Comprador) => {
     setEditingCompradorId(comprador.id);
 
@@ -684,8 +768,8 @@ function App() {
     setCUrgencia(comprador.urgencia);
     setCObs(comprador.observacoes || '');
     setCFoiContactado(comprador.foi_contactado);
-    setCEstadoComprador(comprador.estado_comprador || 'Ativo'); // Novo
-    setCOrigemContacto(comprador.origem_contacto || 'Outro'); // Novo
+    setCEstadoComprador(comprador.estado_comprador || 'Ativo');
+    setCOrigemContacto(comprador.origem_contacto || 'Outro');
     
     if (comprador.data_contacto) {
       const d = new Date(comprador.data_contacto);
@@ -811,15 +895,10 @@ function App() {
     }
   };
 
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
-  };
-
-  // --- LOGICA DE FILTRAGEM REATIVA DE IMÓVEIS (PROPRIETÁRIOS) ---
+  // --- FILTROS DE IMÓVEIS (PROPRIETÁRIOS) ---
   const getFilteredImoveis = () => {
     let result = [...vendedores];
 
-    // 1. Pesquisa por texto
     if (fImovelPesquisa.trim()) {
       const q = fImovelPesquisa.toLowerCase();
       result = result.filter(v => 
@@ -831,32 +910,26 @@ function App() {
       );
     }
 
-    // 2. Filtro por Tipo de Imóvel (múltiplos vistos)
     if (fImovelTipos.length > 0) {
       result = result.filter(v => fImovelTipos.includes(v.tipo_imovel));
     }
 
-    // 3. Filtro por Tipologia (múltiplos vistos)
     if (fImovelTipologias.length > 0) {
       result = result.filter(v => fImovelTipologias.includes(v.tipologia));
     }
 
-    // 4. Filtro por Preço Máximo (Slider)
     if (fImovelPrecoMax < 1000000) {
       result = result.filter(v => v.preco_objetivo <= fImovelPrecoMax);
     }
 
-    // 5. Filtro por Estado
     if (fImovelEstado !== 'Todos') {
       result = result.filter(v => v.estado_imovel === fImovelEstado);
     }
 
-    // 6. Filtro por Origem
     if (fImovelOrigem !== 'Todos') {
       result = result.filter(v => v.origem_contacto === fImovelOrigem);
     }
 
-    // 7. Ordenação
     result.sort((a, b) => {
       if (sortImoveisBy === 'alfabetica-asc') {
         return a.proprietario_nome.localeCompare(b.proprietario_nome);
@@ -876,18 +949,16 @@ function App() {
       if (sortImoveisBy === 'data-asc') {
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       }
-      // Padrão: data-desc (Mais recentes)
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
     return result;
   };
 
-  // --- LOGICA DE FILTRAGEM REATIVA DE COMPRADORES ---
+  // --- FILTROS DE COMPRADORES ---
   const getFilteredCompradores = () => {
     let result = [...compradores];
 
-    // 1. Pesquisa por texto
     if (fCompradorPesquisa.trim()) {
       const q = fCompradorPesquisa.toLowerCase();
       result = result.filter(c => 
@@ -897,36 +968,30 @@ function App() {
       );
     }
 
-    // 2. Filtro por Tipo de Imóvel Pretendido (múltiplos vistos)
     if (fCompradorTipos.length > 0) {
       result = result.filter(c => 
         c.tipos_imovel_pretendidos.some(t => fCompradorTipos.includes(t))
       );
     }
 
-    // 3. Filtro por Tipologia Pretendida (múltiplos vistos)
     if (fCompradorTipologias.length > 0) {
       result = result.filter(c => 
         c.tipologias_pretendidas.some(t => fCompradorTipologias.includes(t))
       );
     }
 
-    // 4. Filtro por Orçamento Máximo (Slider)
     if (fCompradorOrcamentoMax < 1000000) {
       result = result.filter(c => c.orcamento_maximo <= fCompradorOrcamentoMax);
     }
 
-    // 5. Filtro por Estado
     if (fCompradorEstado !== 'Todos') {
       result = result.filter(c => c.estado_comprador === fCompradorEstado);
     }
 
-    // 6. Filtro por Origem
     if (fCompradorOrigem !== 'Todos') {
       result = result.filter(c => c.origem_contacto === fCompradorOrigem);
     }
 
-    // 7. Ordenação
     result.sort((a, b) => {
       if (sortCompradoresBy === 'alfabetica-asc') {
         return a.comprador_nome.localeCompare(b.comprador_nome);
@@ -943,7 +1008,6 @@ function App() {
       if (sortCompradoresBy === 'data-asc') {
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       }
-      // Padrão: data-desc
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
@@ -1038,6 +1102,8 @@ function App() {
   };
 
   const calendarEvents = getCalendarEvents();
+  const selectedDayStr = getLocalDateString(selectedDay);
+  const selectedDayEvents = calendarEvents.filter(e => e.date === selectedDayStr);
 
   const prevMonth = () => {
     setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
@@ -1099,9 +1165,6 @@ function App() {
     return cells;
   };
 
-  const selectedDayStr = getLocalDateString(selectedDay);
-  const selectedDayEvents = calendarEvents.filter(e => e.date === selectedDayStr);
-
   const monthNames = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
@@ -1127,7 +1190,7 @@ function App() {
         ))}
       </div>
 
-      {/* BARRA LATERAL ESQUERDA (SaaS Style) */}
+      {/* BARRA LATERAL ESQUERDA */}
       <aside className="app-sidebar">
         <div className="sidebar-profile">
           <div className="profile-avatar">I</div>
@@ -1249,7 +1312,7 @@ function App() {
         {/* Painel Central com Scroll */}
         <section className="view-panel">
           
-          {/* TAB 1: PAINEL GERAL (DASHBOARD) */}
+          {/* TAB 1: DASHBOARD */}
           {activeMenu === 'dashboard' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
@@ -1296,7 +1359,6 @@ function App() {
 
               </div>
 
-              {/* Tabela de Atividades Recentes */}
               <div className="data-table-card" style={{ marginTop: 0 }}>
                 <div className="table-header-bar">
                   <h3 className="table-header-title">Últimos Matches Qualificados</h3>
@@ -1347,11 +1409,10 @@ function App() {
             </div>
           )}
 
-          {/* TAB 2: GESTÃO DE NEGÓCIOS (KANBAN BOARD) */}
+          {/* TAB 2: CRM KANBAN */}
           {activeMenu === 'kanban' && (
             <div className="kanban-board">
               
-              {/* COLUNA 1: NOVAS LEADS (Pendente) */}
               <div className="kanban-column">
                 <div className="column-header">
                   <div className="column-title-box">
@@ -1373,7 +1434,6 @@ function App() {
                 ))}
               </div>
 
-              {/* COLUNA 2: EM CONTACTO (Visita Agendada) */}
               <div className="kanban-column">
                 <div className="column-header">
                   <div className="column-title-box">
@@ -1395,7 +1455,6 @@ function App() {
                 ))}
               </div>
 
-              {/* COLUNA 3: PROPOSTA APRESENTADA */}
               <div className="kanban-column">
                 <div className="column-header">
                   <div className="column-title-box">
@@ -1417,7 +1476,6 @@ function App() {
                 ))}
               </div>
 
-              {/* COLUNA 4: NEGÓCIO FECHADO */}
               <div className="kanban-column">
                 <div className="column-header">
                   <div className="column-title-box">
@@ -1442,26 +1500,23 @@ function App() {
             </div>
           )}
 
-          {/* TAB 3: IMÓVEIS (PROPRIETÁRIOS) COM FILTROS AVANÇADOS */}
+          {/* TAB 3: IMÓVEIS (PROPRIETÁRIOS) */}
           {activeMenu === 'imoveis' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               
-              {/* Painel de Filtros Avançados de Imóveis */}
-              <div className="filters-panel-card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-premium)' }}>
+              <div className="filters-panel-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                   
-                  {/* Pesquisa Texto */}
                   <div style={{ flex: '1 1 240px' }}>
                     <input 
                       type="text" 
-                      placeholder="Pesquisar proprietário, contacto, rua ou freguesia..."
+                      placeholder="Pesquisar proprietário, contacto, morada ou freguesia..."
                       value={fImovelPesquisa}
                       onChange={e => setFImovelPesquisa(e.target.value)}
                       style={{ width: '100%', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none' }}
                     />
                   </div>
 
-                  {/* Dropdown visto - Tipo Imóvel */}
                   <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
                     <button 
                       type="button" 
@@ -1470,12 +1525,11 @@ function App() {
                         setShowImovelTiposDropdown(!showImovelTiposDropdown);
                         setShowImovelTipologiasDropdown(false);
                       }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
                     >
                       Tipos ({fImovelTipos.length || 'Todos'})
                     </button>
                     {showImovelTiposDropdown && (
-                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '170px' }}>
+                      <div className="filter-dropdown-menu">
                         {tiposImovelDisponiveis.map(t => (
                           <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
                             <input 
@@ -1496,7 +1550,6 @@ function App() {
                     )}
                   </div>
 
-                  {/* Dropdown visto - Tipologia */}
                   <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
                     <button 
                       type="button" 
@@ -1505,12 +1558,11 @@ function App() {
                         setShowImovelTipologiasDropdown(!showImovelTipologiasDropdown);
                         setShowImovelTiposDropdown(false);
                       }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
                     >
                       Tipologia ({fImovelTipologias.length || 'Todas'})
                     </button>
                     {showImovelTipologiasDropdown && (
-                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '120px' }}>
+                      <div className="filter-dropdown-menu">
                         {tipologiasDisponiveis.map(t => (
                           <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
                             <input 
@@ -1531,12 +1583,7 @@ function App() {
                     )}
                   </div>
 
-                  {/* Estado do Imovel */}
-                  <select 
-                    value={fImovelEstado} 
-                    onChange={e => setFImovelEstado(e.target.value)}
-                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
-                  >
+                  <select value={fImovelEstado} onChange={e => setFImovelEstado(e.target.value)} className="filter-select">
                     <option value="Todos">Todos os Estados</option>
                     <option value="Ativo">🟢 Ativo</option>
                     <option value="Reservado">🟡 Reservado</option>
@@ -1544,24 +1591,14 @@ function App() {
                     <option value="Inativo">⚫ Inativo</option>
                   </select>
 
-                  {/* Origem do Contacto */}
-                  <select 
-                    value={fImovelOrigem} 
-                    onChange={e => setFImovelOrigem(e.target.value)}
-                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
-                  >
+                  <select value={fImovelOrigem} onChange={e => setFImovelOrigem(e.target.value)} className="filter-select">
                     <option value="Todos">Todas as Origens</option>
                     {origensDisponiveis.map(o => (
                       <option key={o} value={o}>{o}</option>
                     ))}
                   </select>
 
-                  {/* Ordenação */}
-                  <select 
-                    value={sortImoveisBy} 
-                    onChange={e => setSortImoveisBy(e.target.value)}
-                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)', marginLeft: 'auto' }}
-                  >
+                  <select value={sortImoveisBy} onChange={e => setSortImoveisBy(e.target.value)} className="filter-select" style={{ marginLeft: 'auto' }}>
                     <option value="data-desc">Mais Recentes</option>
                     <option value="data-asc">Mais Antigos</option>
                     <option value="alfabetica-asc">Nome Proprietário (A-Z)</option>
@@ -1573,7 +1610,6 @@ function App() {
 
                 </div>
 
-                {/* Slider Horizontal de Preço Máximo */}
                 <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
                     <span>Preço Máximo</span>
@@ -1591,34 +1627,40 @@ function App() {
                     style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--text-primary)' }}
                   />
                 </div>
-
               </div>
 
-              {/* Tabela de Imóveis */}
               <div className="data-table-card" style={{ marginTop: 0 }}>
                 <div className="table-header-bar">
                   <h3 className="table-header-title">Lista de Propriedades ({getFilteredImoveis().length})</h3>
-                  <button 
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setEditingImovelId(null);
-                      setVNome('');
-                      setVContacto('');
-                      setVPrecoObj('');
-                      setVPrecoMin('');
-                      setVArea('');
-                      setVRua('');
-                      setVCidade('');
-                      setVFreguesia('');
-                      setVObs('');
-                      setVEstadoImovel('Ativo');
-                      setVOrigemContacto('Outro');
-                      setIsImovelModalOpen(true);
-                    }}
-                  >
-                    <Plus size={16} />
-                    <span>Adicionar Imóvel</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    
+                    <button className="btn btn-secondary" onClick={handleImportContacto}>
+                      <Smartphone size={16} />
+                      <span>Importar Telemóvel</span>
+                    </button>
+
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setEditingImovelId(null);
+                        setVNome('');
+                        setVContacto('');
+                        setVPrecoObj('');
+                        setVPrecoMin('');
+                        setVArea('');
+                        setVRua('');
+                        setVCidade('');
+                        setVFreguesia('');
+                        setVObs('');
+                        setVEstadoImovel('Ativo');
+                        setVOrigemContacto('Outro');
+                        setIsImovelModalOpen(true);
+                      }}
+                    >
+                      <Plus size={16} />
+                      <span>Adicionar Imóvel</span>
+                    </button>
+                  </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="app-table">
@@ -1697,15 +1739,13 @@ function App() {
             </div>
           )}
 
-          {/* TAB 4: COMPRADORES COM FILTROS AVANÇADOS */}
+          {/* TAB 4: COMPRADORES */}
           {activeMenu === 'compradores' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               
-              {/* Painel de Filtros de Compradores */}
-              <div className="filters-panel-card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-premium)' }}>
+              <div className="filters-panel-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                   
-                  {/* Pesquisa Texto */}
                   <div style={{ flex: '1 1 240px' }}>
                     <input 
                       type="text" 
@@ -1716,7 +1756,6 @@ function App() {
                     />
                   </div>
 
-                  {/* Dropdown visto - Tipo Imóvel Pretendido */}
                   <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
                     <button 
                       type="button" 
@@ -1725,12 +1764,11 @@ function App() {
                         setShowCompradorTiposDropdown(!showCompradorTiposDropdown);
                         setShowCompradorTipologiasDropdown(false);
                       }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
                     >
                       Pretende Tipos ({fCompradorTipos.length || 'Todos'})
                     </button>
                     {showCompradorTiposDropdown && (
-                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '170px' }}>
+                      <div className="filter-dropdown-menu">
                         {tiposImovelDisponiveis.map(t => (
                           <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
                             <input 
@@ -1751,7 +1789,6 @@ function App() {
                     )}
                   </div>
 
-                  {/* Dropdown visto - Tipologia Pretendida */}
                   <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
                     <button 
                       type="button" 
@@ -1760,12 +1797,11 @@ function App() {
                         setShowCompradorTipologiasDropdown(!showCompradorTipologiasDropdown);
                         setShowCompradorTiposDropdown(false);
                       }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
                     >
                       Pretende Tipologias ({fCompradorTipologias.length || 'Todas'})
                     </button>
                     {showCompradorTipologiasDropdown && (
-                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '120px' }}>
+                      <div className="filter-dropdown-menu">
                         {tipologiasDisponiveis.map(t => (
                           <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
                             <input 
@@ -1786,36 +1822,21 @@ function App() {
                     )}
                   </div>
 
-                  {/* Estado Comprador */}
-                  <select 
-                    value={fCompradorEstado} 
-                    onChange={e => setFCompradorEstado(e.target.value)}
-                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
-                  >
+                  <select value={fCompradorEstado} onChange={e => setFCompradorEstado(e.target.value)} className="filter-select">
                     <option value="Todos">Todos os Estados</option>
                     <option value="Ativo">🟢 Ativo (Em Procura)</option>
                     <option value="Negócio Fechado">🎉 Negócio Fechado</option>
                     <option value="Inativo">⚫ Inativo</option>
                   </select>
 
-                  {/* Origem Comprador */}
-                  <select 
-                    value={fCompradorOrigem} 
-                    onChange={e => setFCompradorOrigem(e.target.value)}
-                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
-                  >
+                  <select value={fCompradorOrigem} onChange={e => setFCompradorOrigem(e.target.value)} className="filter-select">
                     <option value="Todos">Todas as Origens</option>
                     {origensDisponiveis.map(o => (
                       <option key={o} value={o}>{o}</option>
                     ))}
                   </select>
 
-                  {/* Ordenação */}
-                  <select 
-                    value={sortCompradoresBy} 
-                    onChange={e => setSortCompradoresBy(e.target.value)}
-                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)', marginLeft: 'auto' }}
-                  >
+                  <select value={sortCompradoresBy} onChange={e => setSortCompradoresBy(e.target.value)} className="filter-select" style={{ marginLeft: 'auto' }}>
                     <option value="data-desc">Mais Recentes</option>
                     <option value="data-asc">Mais Antigos</option>
                     <option value="alfabetica-asc">Nome Comprador (A-Z)</option>
@@ -1826,7 +1847,6 @@ function App() {
 
                 </div>
 
-                {/* Slider Horizontal de Orçamento Máximo */}
                 <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
                     <span>Orçamento Máximo</span>
@@ -1844,34 +1864,40 @@ function App() {
                     style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--text-primary)' }}
                   />
                 </div>
-
               </div>
 
-              {/* Tabela de Compradores */}
               <div className="data-table-card" style={{ marginTop: 0 }}>
                 <div className="table-header-bar">
                   <h3 className="table-header-title">Lista de Leads de Compradores ({getFilteredCompradores().length})</h3>
-                  <button 
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setEditingCompradorId(null);
-                      setCNome('');
-                      setCContacto('');
-                      setCOrcamento('');
-                      setCTipologias(['T2']);
-                      setCTiposImovel(['Apartamento']);
-                      setCZonas([]);
-                      setCObs('');
-                      setCFoiContactado(false);
-                      setCDataContacto('');
-                      setCEstadoComprador('Ativo');
-                      setCOrigemContacto('Outro');
-                      setIsCompradorModalOpen(true);
-                    }}
-                  >
-                    <Plus size={16} />
-                    <span>Registar Comprador</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    
+                    <button className="btn btn-secondary" onClick={handleImportContacto}>
+                      <Smartphone size={16} />
+                      <span>Importar Telemóvel</span>
+                    </button>
+
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setEditingCompradorId(null);
+                        setCNome('');
+                        setCContacto('');
+                        setCOrcamento('');
+                        setCTipologias(['T2']);
+                        setCTiposImovel(['Apartamento']);
+                        setCZonas([]);
+                        setCObs('');
+                        setCFoiContactado(false);
+                        setCDataContacto('');
+                        setCEstadoComprador('Ativo');
+                        setCOrigemContacto('Outro');
+                        setIsCompradorModalOpen(true);
+                      }}
+                    >
+                      <PlusCircle size={16} />
+                      <span>Registar Comprador</span>
+                    </button>
+                  </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="app-table">
@@ -1965,11 +1991,10 @@ function App() {
             </div>
           )}
 
-          {/* TAB 5: CALENDÁRIO WIDGET COMPACTO */}
+          {/* TAB 5: CALENDÁRIO */}
           {activeMenu === 'calendario' && (
             <div className="calendar-wrapper">
               
-              {/* Calendário Compacto */}
               <div className="calendar-main-card" style={{ maxWidth: '340px' }}>
                 <div className="calendar-header-nav">
                   <button onClick={prevMonth} className="btn-quick-action" style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -2013,7 +2038,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Agenda Diária */}
               <div className="calendar-activities-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
                   <h3 className="card-title" style={{ fontSize: '1.1rem' }}>
@@ -2127,7 +2151,7 @@ function App() {
             </div>
           )}
 
-          {/* Banner Promocional Inferior */}
+          {/* Banner */}
           <div className="bottom-banner">
             <div className="banner-content">
               <Sparkles size={20} style={{ color: 'var(--accent-pink)' }} />
@@ -2140,40 +2164,25 @@ function App() {
         </section>
       </main>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      {/* MOBILE BOTTOM NAV */}
       <nav className="mobile-bottom-nav">
-        <button 
-          className={`mobile-nav-item ${activeMenu === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveMenu('dashboard')}
-        >
+        <button className={`mobile-nav-item ${activeMenu === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveMenu('dashboard')}>
           <LayoutDashboard size={20} />
           <span>Painel</span>
         </button>
-        <button 
-          className={`mobile-nav-item ${activeMenu === 'kanban' ? 'active' : ''}`}
-          onClick={() => setActiveMenu('kanban')}
-        >
+        <button className={`mobile-nav-item ${activeMenu === 'kanban' ? 'active' : ''}`} onClick={() => setActiveMenu('kanban')}>
           <FolderKanban size={20} />
           <span>CRM</span>
         </button>
-        <button 
-          className={`mobile-nav-item ${activeMenu === 'imoveis' ? 'active' : ''}`}
-          onClick={() => setActiveMenu('imoveis')}
-        >
+        <button className={`mobile-nav-item ${activeMenu === 'imoveis' ? 'active' : ''}`} onClick={() => setActiveMenu('imoveis')}>
           <Home size={20} />
           <span>Imóveis</span>
         </button>
-        <button 
-          className={`mobile-nav-item ${activeMenu === 'compradores' ? 'active' : ''}`}
-          onClick={() => setActiveMenu('compradores')}
-        >
+        <button className={`mobile-nav-item ${activeMenu === 'compradores' ? 'active' : ''}`} onClick={() => setActiveMenu('compradores')}>
           <Users size={20} />
           <span>Clientes</span>
         </button>
-        <button 
-          className={`mobile-nav-item ${activeMenu === 'calendario' ? 'active' : ''}`}
-          onClick={() => setActiveMenu('calendario')}
-        >
+        <button className={`mobile-nav-item ${activeMenu === 'calendario' ? 'active' : ''}`} onClick={() => setActiveMenu('calendario')}>
           <Calendar size={20} />
           <span>Agenda</span>
         </button>
@@ -2287,7 +2296,6 @@ function App() {
                 </select>
               </div>
 
-              {/* Origem Contacto (Novo) */}
               <div className="form-group">
                 <label>Origem do Contacto*</label>
                 <select value={vOrigemContacto} onChange={(e) => setVOrigemContacto(e.target.value)}>
@@ -2297,7 +2305,6 @@ function App() {
                 </select>
               </div>
 
-              {/* Estado Acompanhamento Ficha (Novo) */}
               <div className="form-group form-group-full">
                 <label>Estado de Acompanhamento (Etapa)*</label>
                 <select value={vEstadoImovel} onChange={(e) => setVEstadoImovel(e.target.value)}>
@@ -2324,7 +2331,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vCidade}
-                  list="cidades-modal"
+                  list="v-cidades-list"
                   onChange={(e) => {
                     setVCidade(e.target.value);
                     fetchConcelhos(e.target.value);
@@ -2332,7 +2339,7 @@ function App() {
                   placeholder="Ex: Beja"
                   required
                 />
-                <datalist id="cidades-modal">
+                <datalist id="v-cidades-list">
                   {concelhoSugestoes.map((c, idx) => <option key={idx} value={c} />)}
                 </datalist>
               </div>
@@ -2342,7 +2349,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vFreguesia}
-                  list="freguesias-modal"
+                  list="v-freguesias-list"
                   onChange={(e) => {
                     setVFreguesia(e.target.value);
                     fetchFreguesias(e.target.value, vCidade);
@@ -2350,7 +2357,7 @@ function App() {
                   placeholder="Ex: Salvador"
                   required
                 />
-                <datalist id="freguesias-modal">
+                <datalist id="v-freguesias-list">
                   {freguesiaSugestoes.map((f, idx) => <option key={idx} value={f} />)}
                 </datalist>
               </div>
@@ -2451,7 +2458,6 @@ function App() {
                 />
               </div>
 
-              {/* Origem Contacto Comprador (Novo) */}
               <div className="form-group">
                 <label>Origem do Contacto*</label>
                 <select value={cOrigemContacto} onChange={(e) => setCOrigemContacto(e.target.value)}>
@@ -2461,7 +2467,6 @@ function App() {
                 </select>
               </div>
 
-              {/* Estado Acompanhamento Comprador (Novo) */}
               <div className="form-group">
                 <label>Estado de Acompanhamento*</label>
                 <select value={cEstadoComprador} onChange={(e) => setCEstadoComprador(e.target.value)}>
@@ -2557,7 +2562,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Qualificação do contacto */}
               <div className="form-group form-group-full" style={{ borderTop: '1px solid var(--border-color)', padding: '0.85rem 0' }}>
                 <label className="checkbox-label">
                   <input type="checkbox" checked={cFoiContactado} onChange={e => setCFoiContactado(e.target.checked)} />
@@ -2723,11 +2727,196 @@ function App() {
         </div>
       )}
 
+      {/* --- MODAL 4: SIMULAÇÃO DE SELEÇÃO DE CONTACTOS --- */}
+      {isSimulatedContactsModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content-card" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Escolher do Telemóvel</h3>
+              <button className="modal-close-btn" onClick={() => setIsSimulatedContactsModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                A Contact Picker API só está ativa em telemóveis compatíveis (Chrome Android/Safari iOS). Escolhe um dos teus contactos para simular:
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {contactosSimulados.map((c, idx) => (
+                  <div 
+                    key={idx} 
+                    onClick={() => handleSelectSimulatedContact(c)}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      padding: '0.85rem', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: 'var(--radius-md)', 
+                      backgroundColor: 'var(--bg-app)', 
+                      cursor: 'pointer',
+                      transition: 'var(--transition-smooth)'
+                    }}
+                    className="simulated-contact-item"
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{c.nome}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.telefone}</div>
+                    </div>
+                    <Smartphone size={16} style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 5: DECISÃO DE IMPORTAÇÃO DE CONTACTO --- */}
+      {isImportDecisionModalOpen && importedContact && (
+        <div className="modal-overlay">
+          <div className="modal-content-card" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Importar Contacto</h3>
+              <button className="modal-close-btn" onClick={() => setIsImportDecisionModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              
+              <div style={{ backgroundColor: 'var(--bg-app)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                <Smartphone size={24} style={{ color: 'var(--accent-pink)', marginBottom: '4px' }} />
+                <h4 style={{ fontWeight: 700, fontSize: '1.05rem', margin: '4px 0' }}>{importedContact.nome}</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Tlf: {importedContact.telefone} {importedContact.email && `| Em: ${importedContact.email}`}</p>
+              </div>
+
+              {associationMode === 'decision' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '8px' }}>
+                    O que pretendes fazer com este contacto importado?
+                  </p>
+                  
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => {
+                      setIsImportDecisionModalOpen(false);
+                      setCNome(importedContact.nome);
+                      setCContacto(importedContact.telefone);
+                      setCOrcamento('');
+                      setCTipologias(['T2']);
+                      setCTiposImovel(['Apartamento']);
+                      setCZonas([]);
+                      setCObs('');
+                      setCFoiContactado(false);
+                      setCEstadoComprador('Ativo');
+                      setCOrigemContacto('Outro');
+                      setIsCompradorModalOpen(true);
+                    }}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <PlusCircle size={16} />
+                    Criar Novo Comprador (Lead)
+                  </button>
+
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => {
+                      setIsImportDecisionModalOpen(false);
+                      setVNome(importedContact.nome);
+                      setVContacto(importedContact.telefone);
+                      setVPrecoObj('');
+                      setVPrecoMin('');
+                      setVArea('');
+                      setVRua('');
+                      setVCidade('');
+                      setVFreguesia('');
+                      setVObs('');
+                      setVEstadoImovel('Ativo');
+                      setVOrigemContacto('Outro');
+                      setIsImovelModalOpen(true);
+                    }}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <Building size={16} />
+                    Criar Novo Imóvel (Vendedor)
+                  </button>
+
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setAssociationMode('associate-imovel')}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <Edit2 size={16} />
+                    Atualizar Proprietário de Imóvel Existente
+                  </button>
+
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setAssociationMode('associate-comprador')}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <Users size={16} />
+                    Atualizar Dados de Comprador Existente
+                  </button>
+                </div>
+              )}
+
+              {associationMode === 'associate-imovel' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h4 style={{ fontWeight: 700, fontSize: '0.9rem' }}>Escolha o imóvel para atualizar:</h4>
+                    <button className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '0.75rem' }} onClick={() => setAssociationMode('decision')}>Voltar</button>
+                  </div>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                    {vendedores.map(imovel => (
+                      <div 
+                        key={imovel.id} 
+                        onClick={() => handleAssociateToImovel(imovel.id)}
+                        style={{ padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', backgroundColor: 'var(--bg-app)' }}
+                        className="association-list-item"
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>Prop: {imovel.proprietario_nome} ({imovel.proprietario_contacto})</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{imovel.tipo_imovel} em {imovel.freguesia}, {imovel.cidade}</div>
+                      </div>
+                    ))}
+                    {vendedores.length === 0 && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Sem imóveis disponíveis.</p>}
+                  </div>
+                </div>
+              )}
+
+              {associationMode === 'associate-comprador' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h4 style={{ fontWeight: 700, fontSize: '0.9rem' }}>Escolha o comprador para atualizar:</h4>
+                    <button className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '0.75rem' }} onClick={() => setAssociationMode('decision')}>Voltar</button>
+                  </div>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                    {compradores.map(comp => (
+                      <div 
+                        key={comp.id} 
+                        onClick={() => handleAssociateToComprador(comp.id)}
+                        style={{ padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', backgroundColor: 'var(--bg-app)' }}
+                        className="association-list-item"
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{comp.comprador_nome} ({comp.comprador_contacto})</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Orc: {formatCurrency(comp.orcamento_maximo)}</div>
+                      </div>
+                    ))}
+                    {compradores.length === 0 && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Sem compradores disponíveis.</p>}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
-// Sub-componente de Cartão de Kanban para simplificar o ficheiro
+// Sub-componente de Cartão de Kanban
 interface KanbanCardProps {
   match: Match;
   compradores: Comprador[];
@@ -2750,10 +2939,6 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
   const iniciais = match.comprador_nome
     ? match.comprador_nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : 'C';
-
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
-  };
 
   const getProfileClassAndLabel = () => {
     if (match.preco_objetivo > 450000) {
@@ -2800,7 +2985,6 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
         <span className="card-budget">{formatCurrency(match.preco_objetivo)}</span>
       </div>
 
-      {/* Painel do Imóvel de Match */}
       <div className="card-interested-box">
         <div className="interested-thumbnail">
           <Building size={18} />
@@ -2815,7 +2999,6 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
         </div>
       </div>
 
-      {/* CRM Controlos Integrados no Cartão */}
       <div className="card-crm-controls">
         <div className="crm-status-row">
           <span className="crm-status-lbl">CRM Estado</span>
