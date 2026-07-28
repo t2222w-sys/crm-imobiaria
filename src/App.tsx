@@ -130,10 +130,21 @@ const getLocalDateString = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const parseSafeDate = (dateStr: any): Date | null => {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  try {
+    const formatted = String(dateStr).replace(' ', 'T');
+    const d = new Date(formatted);
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+};
+
 const getLocalDateFromISO = (isoStr: string) => {
-  if (!isoStr) return '';
-  const date = new Date(isoStr);
-  return getLocalDateString(date);
+  const date = parseSafeDate(isoStr);
+  return date ? getLocalDateString(date) : '';
 };
 
 function App() {
@@ -799,10 +810,14 @@ function App() {
     setCOrigemContacto(comprador.origem_contacto || 'Outro');
     
     if (comprador.data_contacto) {
-      const d = new Date(comprador.data_contacto);
-      const tzOffset = d.getTimezoneOffset() * 60000;
-      const localISOTime = (new Date(d.getTime() - tzOffset)).toISOString().slice(0, 16);
-      setCDataContacto(localISOTime);
+      const d = parseSafeDate(comprador.data_contacto);
+      if (d) {
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(d.getTime() - tzOffset)).toISOString().slice(0, 16);
+        setCDataContacto(localISOTime);
+      } else {
+        setCDataContacto('');
+      }
     } else {
       setCDataContacto('');
     }
@@ -974,9 +989,13 @@ function App() {
         return b.area_m2 - a.area_m2;
       }
       if (sortImoveisBy === 'data-asc') {
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        const da = parseSafeDate(a.created_at)?.getTime() || 0;
+        const db = parseSafeDate(b.created_at)?.getTime() || 0;
+        return da - db;
       }
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      const da = parseSafeDate(a.created_at)?.getTime() || 0;
+      const db = parseSafeDate(b.created_at)?.getTime() || 0;
+      return db - da;
     });
 
     return result;
@@ -1033,9 +1052,13 @@ function App() {
         return b.orcamento_maximo - a.orcamento_maximo;
       }
       if (sortCompradoresBy === 'data-asc') {
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        const da = parseSafeDate(a.created_at)?.getTime() || 0;
+        const db = parseSafeDate(b.created_at)?.getTime() || 0;
+        return da - db;
       }
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      const da = parseSafeDate(a.created_at)?.getTime() || 0;
+      const db = parseSafeDate(b.created_at)?.getTime() || 0;
+      return db - da;
     });
 
     return result;
@@ -2001,7 +2024,10 @@ function App() {
                                 <span style={{ color: 'var(--urgency-baixa)', fontWeight: 600, fontSize: '0.8rem' }}>Contactado</span>
                                 {comp.data_contacto && (
                                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                    {new Date(comp.data_contacto).toLocaleDateString('pt-PT')}
+                                    {(() => {
+                                      const d = parseSafeDate(comp.data_contacto);
+                                      return d ? d.toLocaleDateString('pt-PT') : '';
+                                    })()}
                                   </span>
                                 )}
                               </div>
