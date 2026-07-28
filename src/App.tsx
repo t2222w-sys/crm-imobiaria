@@ -709,7 +709,8 @@ function App() {
 
   // --- LÓGICA DE IMPORTAÇÃO DE CONTACTOS ---
   const handleImportContacto = async () => {
-    const isApiSupported = 'contacts' in navigator && 'ContactsManager' in window;
+    const nav = navigator as any;
+    const isApiSupported = !!(nav.contacts && nav.contacts.select);
     
     if (isApiSupported) {
       try {
