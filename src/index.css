@@ -1165,3 +1165,97 @@ body {
     border-radius: 50%;
   }
 }
+
+/* --- ESTILOS DOS FILTROS E ORDENAÇÃO DE LEADS --- */
+.filters-panel-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-premium);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.filters-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-dropdown-container {
+  position: relative;
+}
+
+.btn-filter-dropdown {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition-smooth);
+}
+
+.btn-filter-dropdown:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  box-shadow: var(--shadow-premium);
+  min-width: 180px;
+  animation: slideUp 0.15s ease-out;
+}
+
+.filter-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  outline: none;
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.filter-select:hover {
+  border-color: var(--text-primary);
+}
+
+/* Sliders de Filtro de Preço/Orçamento */
+.slider-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-range-slider {
+  width: 100%;
+  cursor: pointer;
+  accent-color: var(--text-primary);
+  height: 5px;
+  background: var(--bg-app);
+  border-radius: 5px;
+}

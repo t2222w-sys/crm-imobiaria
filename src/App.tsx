@@ -49,6 +49,8 @@ interface Imovel {
   observacoes?: string;
   created_at: string;
   updated_at: string;
+  estado_imovel: string; // Novo
+  origem_contacto: string; // Novo
 }
 
 interface Comprador {
@@ -68,6 +70,8 @@ interface Comprador {
   data_contacto?: string | null;
   created_at: string;
   updated_at: string;
+  estado_comprador: string; // Novo
+  origem_contacto: string; // Novo
 }
 
 interface Match {
@@ -88,7 +92,7 @@ interface Match {
   match_score: number;
 }
 
-// Nova Interface de Atividades
+// Interface de Atividades
 interface Atividade {
   id: string;
   tipos_atividade: string[];
@@ -167,18 +171,42 @@ function App() {
   // Estados dos Modais
   const [isImovelModalOpen, setIsImovelModalOpen] = useState(false);
   const [isCompradorModalOpen, setIsCompradorModalOpen] = useState(false);
-  const [isAtividadeModalOpen, setIsAtividadeModalOpen] = useState(false); // Novo
+  const [isAtividadeModalOpen, setIsAtividadeModalOpen] = useState(false);
 
   // Dados da Base de Dados
   const [vendedores, setVendedores] = useState<Imovel[]>([]);
   const [compradores, setCompradores] = useState<Comprador[]>([]);
   const [allMatches, setAllMatches] = useState<Match[]>([]);
-  const [atividades, setAtividades] = useState<Atividade[]>([]); // Novo
+  const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Estados de Edição de Registos
   const [editingImovelId, setEditingImovelId] = useState<string | null>(null);
   const [editingCompradorId, setEditingCompradorId] = useState<string | null>(null);
+
+  // --- FILTROS & ORDENAÇÃO DE IMÓVEIS (PROPRIETÁRIOS) ---
+  const [fImovelPesquisa, setFImovelPesquisa] = useState('');
+  const [fImovelTipos, setFImovelTipos] = useState<string[]>([]);
+  const [fImovelTipologias, setFImovelTipologias] = useState<string[]>([]);
+  const [fImovelPrecoMax, setFImovelPrecoMax] = useState<number>(1000000);
+  const [fImovelEstado, setFImovelEstado] = useState<string>('Todos');
+  const [fImovelOrigem, setFImovelOrigem] = useState<string>('Todos');
+  const [sortImoveisBy, setSortImoveisBy] = useState<string>('data-desc');
+
+  // --- FILTROS & ORDENAÇÃO DE COMPRADORES ---
+  const [fCompradorPesquisa, setFCompradorPesquisa] = useState('');
+  const [fCompradorTipos, setFCompradorTipos] = useState<string[]>([]);
+  const [fCompradorTipologias, setFCompradorTipologias] = useState<string[]>([]);
+  const [fCompradorOrcamentoMax, setFCompradorOrcamentoMax] = useState<number>(1000000);
+  const [fCompradorEstado, setFCompradorEstado] = useState<string>('Todos');
+  const [fCompradorOrigem, setFCompradorOrigem] = useState<string>('Todos');
+  const [sortCompradoresBy, setSortCompradoresBy] = useState<string>('data-desc');
+
+  // Controlos de Dropdowns de Filtros
+  const [showImovelTiposDropdown, setShowImovelTiposDropdown] = useState(false);
+  const [showImovelTipologiasDropdown, setShowImovelTipologiasDropdown] = useState(false);
+  const [showCompradorTiposDropdown, setShowCompradorTiposDropdown] = useState(false);
+  const [showCompradorTipologiasDropdown, setShowCompradorTipologiasDropdown] = useState(false);
 
   // Estados dos Formulários
   // Imóvel / Vendedor
@@ -200,6 +228,8 @@ function App() {
   const [vArrecadacao, setVArrecadacao] = useState(false);
   const [vUrgencia, setVUrgencia] = useState<'Alta' | 'Media' | 'Baixa'>('Media');
   const [vObs, setVObs] = useState('');
+  const [vEstadoImovel, setVEstadoImovel] = useState('Ativo'); // Novo
+  const [vOrigemContacto, setVOrigemContacto] = useState('Outro'); // Novo
 
   // Lead / Comprador
   const [cNome, setCNome] = useState('');
@@ -216,8 +246,10 @@ function App() {
   const [cObs, setCObs] = useState('');
   const [cFoiContactado, setCFoiContactado] = useState(false);
   const [cDataContacto, setCDataContacto] = useState('');
+  const [cEstadoComprador, setCEstadoComprador] = useState('Ativo'); // Novo
+  const [cOrigemContacto, setCOrigemContacto] = useState('Outro'); // Novo
 
-  // Formulário de Nova Atividade (Novo)
+  // Formulário de Nova Atividade
   const [actTipos, setActTipos] = useState<string[]>([]);
   const [actDataHora, setActDataHora] = useState('');
   const [actCompradorId, setActCompradorId] = useState<string>('');
@@ -242,7 +274,24 @@ function App() {
     'Terreno para Construção'
   ];
 
-  // Tipos de Atividades sugeridas pelo utilizador para conjugação múltipla
+  // Origens de Contacto (Lead Sources) propostas
+  const origensDisponiveis = [
+    'Idealista',
+    'Imovirtual',
+    'SuperCasa / Casa SAPO',
+    'Website Imo',
+    'Redes Sociais',
+    'Google',
+    'Placa no Imóvel',
+    'Loja / Escritório',
+    'Prospeção de Rua / Panfletos',
+    'Recomendação / Passa-palavra',
+    'Cliente Antigo',
+    'Parceria / Outro Agente',
+    'Outro'
+  ];
+
+  // Tipos de Atividades
   const tiposAtividadeDisponiveis = [
     'Visita a Imóvel',
     'Reunião com Cliente',
@@ -255,9 +304,7 @@ function App() {
     'Outro'
   ];
 
-  // --- UTILS DE FORMATAÇÃO DE DATA LOCAL (Prevenção de fuso horário / dia seguinte) ---
-  
-  // Retorna YYYY-MM-DD em fuso horário local
+  // --- UTILS DE FORMATAÇÃO DE DATA LOCAL ---
   const getLocalDateString = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -265,7 +312,6 @@ function App() {
     return `${year}-${month}-${day}`;
   };
 
-  // Converte data ISO UTC do Supabase para YYYY-MM-DD local
   const getLocalDateFromISO = (isoStr: string) => {
     if (!isoStr) return '';
     const date = new Date(isoStr);
@@ -275,6 +321,18 @@ function App() {
   // Efeitos de Inicialização
   useEffect(() => {
     fetchData();
+  }, []);
+
+  // Fechar dropdowns de filtros ao clicar fora
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setShowImovelTiposDropdown(false);
+      setShowImovelTipologiasDropdown(false);
+      setShowCompradorTiposDropdown(false);
+      setShowCompradorTipologiasDropdown(false);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
   }, []);
 
   // Toasts Helper
@@ -314,7 +372,7 @@ function App() {
       if (mErr) throw mErr;
       setAllMatches(mData || []);
 
-      // Buscar atividades da agenda (Novo)
+      // Buscar atividades
       const { data: actData, error: actErr } = await supabase
         .from('atividades_agenda')
         .select('*')
@@ -328,7 +386,7 @@ function App() {
     }
   };
 
-  // Buscar Concelhos via API do Supabase (Autocomplete)
+  // Autocomplete Concelhos e Freguesias
   const fetchConcelhos = async (pesquisa: string) => {
     if (pesquisa.trim().length < 2) {
       setConcelhoSugestoes([]);
@@ -350,7 +408,6 @@ function App() {
     }
   };
 
-  // Buscar Freguesias via API do Supabase (Autocomplete)
   const fetchFreguesias = async (pesquisa: string, concelhoContexto: string) => {
     if (pesquisa.trim().length < 1) {
       setFreguesiaSugestoes([]);
@@ -381,7 +438,7 @@ function App() {
     e.preventDefault();
 
     if (!vNome.trim() || !vContacto.trim() || !vPrecoObj || !vPrecoMin || !vArea || !vRua.trim() || !vCidade.trim() || !vFreguesia.trim()) {
-      showToast('Por favor, preenche todos os campos obrigatórios do imóvel.', 'error');
+      showToast('Por favor, preenche os campos obrigatórios do imóvel.', 'error');
       return;
     }
 
@@ -412,6 +469,8 @@ function App() {
       tem_arrecadacao: vArrecadacao,
       urgencia: vUrgencia,
       observacoes: vObs || null,
+      estado_imovel: vEstadoImovel, // Novo
+      origem_contacto: vOrigemContacto, // Novo
       updated_at: new Date().toISOString()
     };
 
@@ -423,7 +482,7 @@ function App() {
           .eq('id', editingImovelId);
 
         if (error) throw error;
-        showToast('Imóvel atualizado com sucesso!');
+        showToast('Imóvel atualizado!');
         setEditingImovelId(null);
       } else {
         const { error } = await supabase
@@ -434,7 +493,7 @@ function App() {
         showToast('Imóvel adicionado com sucesso!');
       }
       
-      // Limpar formulário e fechar modal
+      // Limpar formulário
       setVNome('');
       setVContacto('');
       setVTipologia('T2');
@@ -451,6 +510,8 @@ function App() {
       setVQuintal(false);
       setVArrecadacao(false);
       setVObs('');
+      setVEstadoImovel('Ativo');
+      setVOrigemContacto('Outro');
       setIsImovelModalOpen(false);
       
       fetchData();
@@ -482,6 +543,8 @@ function App() {
       observacoes: cObs || null,
       foi_contactado: cFoiContactado,
       data_contacto: cFoiContactado && cDataContacto ? new Date(cDataContacto).toISOString() : null,
+      estado_comprador: cEstadoComprador, // Novo
+      origem_contacto: cOrigemContacto, // Novo
       updated_at: new Date().toISOString()
     };
 
@@ -504,7 +567,7 @@ function App() {
         showToast('Lead de comprador registada!');
       }
 
-      // Limpar formulário e fechar modal
+      // Limpar formulário
       setCNome('');
       setCContacto('');
       setCOrcamento('');
@@ -518,6 +581,8 @@ function App() {
       setCObs('');
       setCFoiContactado(false);
       setCDataContacto('');
+      setCEstadoComprador('Ativo');
+      setCOrigemContacto('Outro');
       setIsCompradorModalOpen(false);
 
       fetchData();
@@ -526,12 +591,12 @@ function App() {
     }
   };
 
-  // Tratar Submissão de Agendamento de Atividade (Novo)
+  // Tratar Agendamento de Atividade
   const handleAddAtividade = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (actTipos.length === 0 || !actDataHora) {
-      showToast('Selecione pelo menos um tipo de atividade e configure a data e hora.', 'error');
+      showToast('Selecione pelo menos um tipo de atividade.', 'error');
       return;
     }
 
@@ -544,14 +609,10 @@ function App() {
     };
 
     try {
-      const { error } = await supabase
-        .from('atividades_agenda')
-        .insert([payload]);
-
+      const { error } = await supabase.from('atividades_agenda').insert([payload]);
       if (error) throw error;
-      showToast('Atividade agendada com sucesso!');
+      showToast('Atividade agendada!');
       
-      // Reset
       setActTipos([]);
       setActDataHora('');
       setActCompradorId('');
@@ -567,20 +628,15 @@ function App() {
     }
   };
 
-  // Eliminar Atividade (Novo)
   const handleDeleteAtividade = async (id: string) => {
-    if (!window.confirm('Eliminar esta atividade permanentemente da agenda?')) return;
+    if (!window.confirm('Eliminar esta atividade da agenda?')) return;
     try {
-      const { error } = await supabase
-        .from('atividades_agenda')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('atividades_agenda').delete().eq('id', id);
       if (error) throw error;
-      showToast('Atividade removida com sucesso.');
+      showToast('Atividade removida.');
       fetchData();
     } catch (err: any) {
-      showToast('Erro ao remover atividade: ' + err.message, 'error');
+      showToast('Erro ao remover: ' + err.message, 'error');
     }
   };
 
@@ -606,6 +662,8 @@ function App() {
     setVArrecadacao(imovel.tem_arrecadacao);
     setVUrgencia(imovel.urgencia);
     setVObs(imovel.observacoes || '');
+    setVEstadoImovel(imovel.estado_imovel || 'Ativo'); // Novo
+    setVOrigemContacto(imovel.origem_contacto || 'Outro'); // Novo
 
     setIsImovelModalOpen(true);
   };
@@ -626,6 +684,8 @@ function App() {
     setCUrgencia(comprador.urgencia);
     setCObs(comprador.observacoes || '');
     setCFoiContactado(comprador.foi_contactado);
+    setCEstadoComprador(comprador.estado_comprador || 'Ativo'); // Novo
+    setCOrigemContacto(comprador.origem_contacto || 'Outro'); // Novo
     
     if (comprador.data_contacto) {
       const d = new Date(comprador.data_contacto);
@@ -639,7 +699,6 @@ function App() {
     setIsCompradorModalOpen(true);
   };
 
-  // Atualizar ou inserir estado da interação/visita
   const handleUpdateInteracao = async (compradorId: string, imovelId: string, estado: string, notas: string) => {
     try {
       const { error } = await supabase
@@ -657,14 +716,13 @@ function App() {
         );
 
       if (error) throw error;
-      showToast('Estado de venda atualizado!');
+      showToast('CRM Estado de Venda Atualizado!');
       fetchData();
     } catch (err: any) {
       showToast('Erro ao atualizar estado: ' + err.message, 'error');
     }
   };
 
-  // Contacto rápido
   const handleToggleContactoRapido = async (compradorId: string, foiContactado: boolean) => {
     try {
       const dataStr = foiContactado ? new Date().toISOString() : null;
@@ -681,11 +739,10 @@ function App() {
       showToast(foiContactado ? 'Marcado como contactado!' : 'Contacto limpo.');
       fetchData();
     } catch (err: any) {
-      showToast('Erro ao atualizar contacto: ' + err.message, 'error');
+      showToast('Erro: ' + err.message, 'error');
     }
   };
 
-  // Apagar registos
   const handleDeleteImovel = async (id: string) => {
     if (!window.confirm('Eliminar este imóvel permanentemente?')) return;
     try {
@@ -710,7 +767,6 @@ function App() {
     }
   };
 
-  // Auxiliares do form
   const handleAddZona = () => {
     const concelho = cZonaInput.trim();
     if (concelho && !cZonas.includes(concelho)) {
@@ -747,7 +803,6 @@ function App() {
     }
   };
 
-  // Toggle múltiplo de tipos na mesma atividade (Novo)
   const handleToggleActTipo = (tipo: string) => {
     if (actTipos.includes(tipo)) {
       setActTipos(actTipos.filter(t => t !== tipo));
@@ -760,11 +815,145 @@ function App() {
     return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
   };
 
-  // --- CALENDÁRIO COM DATAS CORRIGIDAS (LOCAL TIME) ---
+  // --- LOGICA DE FILTRAGEM REATIVA DE IMÓVEIS (PROPRIETÁRIOS) ---
+  const getFilteredImoveis = () => {
+    let result = [...vendedores];
+
+    // 1. Pesquisa por texto
+    if (fImovelPesquisa.trim()) {
+      const q = fImovelPesquisa.toLowerCase();
+      result = result.filter(v => 
+        v.proprietario_nome.toLowerCase().includes(q) ||
+        v.proprietario_contacto.includes(q) ||
+        v.rua.toLowerCase().includes(q) ||
+        v.cidade.toLowerCase().includes(q) ||
+        v.freguesia.toLowerCase().includes(q)
+      );
+    }
+
+    // 2. Filtro por Tipo de Imóvel (múltiplos vistos)
+    if (fImovelTipos.length > 0) {
+      result = result.filter(v => fImovelTipos.includes(v.tipo_imovel));
+    }
+
+    // 3. Filtro por Tipologia (múltiplos vistos)
+    if (fImovelTipologias.length > 0) {
+      result = result.filter(v => fImovelTipologias.includes(v.tipologia));
+    }
+
+    // 4. Filtro por Preço Máximo (Slider)
+    if (fImovelPrecoMax < 1000000) {
+      result = result.filter(v => v.preco_objetivo <= fImovelPrecoMax);
+    }
+
+    // 5. Filtro por Estado
+    if (fImovelEstado !== 'Todos') {
+      result = result.filter(v => v.estado_imovel === fImovelEstado);
+    }
+
+    // 6. Filtro por Origem
+    if (fImovelOrigem !== 'Todos') {
+      result = result.filter(v => v.origem_contacto === fImovelOrigem);
+    }
+
+    // 7. Ordenação
+    result.sort((a, b) => {
+      if (sortImoveisBy === 'alfabetica-asc') {
+        return a.proprietario_nome.localeCompare(b.proprietario_nome);
+      }
+      if (sortImoveisBy === 'alfabetica-desc') {
+        return b.proprietario_nome.localeCompare(a.proprietario_nome);
+      }
+      if (sortImoveisBy === 'preco-asc') {
+        return a.preco_objetivo - b.preco_objetivo;
+      }
+      if (sortImoveisBy === 'preco-desc') {
+        return b.preco_objetivo - a.preco_objetivo;
+      }
+      if (sortImoveisBy === 'area-desc') {
+        return b.area_m2 - a.area_m2;
+      }
+      if (sortImoveisBy === 'data-asc') {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      // Padrão: data-desc (Mais recentes)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+    return result;
+  };
+
+  // --- LOGICA DE FILTRAGEM REATIVA DE COMPRADORES ---
+  const getFilteredCompradores = () => {
+    let result = [...compradores];
+
+    // 1. Pesquisa por texto
+    if (fCompradorPesquisa.trim()) {
+      const q = fCompradorPesquisa.toLowerCase();
+      result = result.filter(c => 
+        c.comprador_nome.toLowerCase().includes(q) ||
+        c.comprador_contacto.includes(q) ||
+        c.observacoes?.toLowerCase().includes(q)
+      );
+    }
+
+    // 2. Filtro por Tipo de Imóvel Pretendido (múltiplos vistos)
+    if (fCompradorTipos.length > 0) {
+      result = result.filter(c => 
+        c.tipos_imovel_pretendidos.some(t => fCompradorTipos.includes(t))
+      );
+    }
+
+    // 3. Filtro por Tipologia Pretendida (múltiplos vistos)
+    if (fCompradorTipologias.length > 0) {
+      result = result.filter(c => 
+        c.tipologias_pretendidas.some(t => fCompradorTipologias.includes(t))
+      );
+    }
+
+    // 4. Filtro por Orçamento Máximo (Slider)
+    if (fCompradorOrcamentoMax < 1000000) {
+      result = result.filter(c => c.orcamento_maximo <= fCompradorOrcamentoMax);
+    }
+
+    // 5. Filtro por Estado
+    if (fCompradorEstado !== 'Todos') {
+      result = result.filter(c => c.estado_comprador === fCompradorEstado);
+    }
+
+    // 6. Filtro por Origem
+    if (fCompradorOrigem !== 'Todos') {
+      result = result.filter(c => c.origem_contacto === fCompradorOrigem);
+    }
+
+    // 7. Ordenação
+    result.sort((a, b) => {
+      if (sortCompradoresBy === 'alfabetica-asc') {
+        return a.comprador_nome.localeCompare(b.comprador_nome);
+      }
+      if (sortCompradoresBy === 'alfabetica-desc') {
+        return b.comprador_nome.localeCompare(a.comprador_nome);
+      }
+      if (sortCompradoresBy === 'orcamento-asc') {
+        return a.orcamento_maximo - b.orcamento_maximo;
+      }
+      if (sortCompradoresBy === 'orcamento-desc') {
+        return b.orcamento_maximo - a.orcamento_maximo;
+      }
+      if (sortCompradoresBy === 'data-asc') {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      // Padrão: data-desc
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+    return result;
+  };
+
+  // --- EVENTOS DO CALENDÁRIO ---
   const getCalendarEvents = (): CalendarEvent[] => {
     const events: CalendarEvent[] = [];
 
-    // 1. Registos de Imóveis (Corrigido para Local)
     vendedores.forEach(v => {
       const d = getLocalDateFromISO(v.created_at);
       events.push({
@@ -789,7 +978,6 @@ function App() {
       }
     });
 
-    // 2. Registos de Compradores (Corrigido para Local)
     compradores.forEach(c => {
       const d = getLocalDateFromISO(c.created_at);
       events.push({
@@ -826,7 +1014,6 @@ function App() {
       }
     });
 
-    // 3. Atividades da Agenda Criadas (Corrigido para Local)
     atividades.forEach(act => {
       const d = getLocalDateFromISO(act.data_hora);
       
@@ -883,13 +1070,12 @@ function App() {
 
     for (let i = 1; i <= totalDays; i++) {
       const cellDate = new Date(year, month, i);
-      const cellDateStr = getLocalDateString(cellDate); // Corrigido para Local
+      const cellDateStr = getLocalDateString(cellDate);
 
       const dayEvents = calendarEvents.filter(e => e.date === cellDateStr);
       const isToday = new Date().toDateString() === cellDate.toDateString();
       const isSelected = selectedDay.toDateString() === cellDate.toDateString();
 
-      // Dots personalizados por tipo de atividade
       cells.push(
         <div 
           key={`current-${i}`} 
@@ -913,7 +1099,7 @@ function App() {
     return cells;
   };
 
-  const selectedDayStr = getLocalDateString(selectedDay); // Corrigido para Local
+  const selectedDayStr = getLocalDateString(selectedDay);
   const selectedDayEvents = calendarEvents.filter(e => e.date === selectedDayStr);
 
   const monthNames = [
@@ -1019,6 +1205,17 @@ function App() {
               className="btn btn-secondary" 
               onClick={() => {
                 setEditingImovelId(null);
+                setVNome('');
+                setVContacto('');
+                setVPrecoObj('');
+                setVPrecoMin('');
+                setVArea('');
+                setVRua('');
+                setVCidade('');
+                setVFreguesia('');
+                setVObs('');
+                setVEstadoImovel('Ativo');
+                setVOrigemContacto('Outro');
                 setIsImovelModalOpen(true);
               }}
             >
@@ -1029,6 +1226,17 @@ function App() {
               className="btn btn-primary"
               onClick={() => {
                 setEditingCompradorId(null);
+                setCNome('');
+                setCContacto('');
+                setCOrcamento('');
+                setCTipologias(['T2']);
+                setCTiposImovel(['Apartamento']);
+                setCZonas([]);
+                setCObs('');
+                setCFoiContactado(false);
+                setCDataContacto('');
+                setCEstadoComprador('Ativo');
+                setCOrigemContacto('Outro');
                 setIsCompradorModalOpen(true);
               }}
             >
@@ -1234,210 +1442,534 @@ function App() {
             </div>
           )}
 
-          {/* TAB 3: IMÓVEIS (VENDEDORES) */}
+          {/* TAB 3: IMÓVEIS (PROPRIETÁRIOS) COM FILTROS AVANÇADOS */}
           {activeMenu === 'imoveis' && (
-            <div className="data-table-card">
-              <div className="table-header-bar">
-                <h3 className="table-header-title">Lista de Propriedades</h3>
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setEditingImovelId(null);
-                    setVNome('');
-                    setVContacto('');
-                    setVPrecoObj('');
-                    setVPrecoMin('');
-                    setVArea('');
-                    setVRua('');
-                    setVCidade('');
-                    setVFreguesia('');
-                    setVObs('');
-                    setIsImovelModalOpen(true);
-                  }}
-                >
-                  <Plus size={16} />
-                  <span>Adicionar Imóvel</span>
-                </button>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="app-table">
-                  <thead>
-                    <tr>
-                      <th>Proprietário</th>
-                      <th>Imóvel</th>
-                      <th>Localização</th>
-                      <th>Preço Anunciado</th>
-                      <th>Área (m²)</th>
-                      <th>Urgência</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vendedores.map(imovel => (
-                      <tr key={imovel.id}>
-                        <td style={{ fontWeight: 700 }}>
-                          <div>{imovel.proprietario_nome}</div>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{imovel.proprietario_contacto}</span>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 600 }}>{imovel.tipo_imovel}</span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}> ({imovel.tipologia})</span>
-                        </td>
-                        <td>{imovel.freguesia}, {imovel.cidade}</td>
-                        <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(imovel.preco_objetivo)}</td>
-                        <td>{imovel.area_m2} m²</td>
-                        <td>
-                          <span className={`badge badge-urgencia-${imovel.urgencia}`}>
-                            {imovel.urgencia}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
-                              onClick={() => startEditImovel(imovel)}
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px' }}
-                              title="Editar"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteImovel(imovel.id)}
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
-                              title="Eliminar"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {vendedores.length === 0 && (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                          Nenhum imóvel registado. Clica em "Adicionar Imóvel" para começar.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              {/* Painel de Filtros Avançados de Imóveis */}
+              <div className="filters-panel-card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-premium)' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  
+                  {/* Pesquisa Texto */}
+                  <div style={{ flex: '1 1 240px' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Pesquisar proprietário, contacto, rua ou freguesia..."
+                      value={fImovelPesquisa}
+                      onChange={e => setFImovelPesquisa(e.target.value)}
+                      style={{ width: '100%', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none' }}
+                    />
+                  </div>
 
-          {/* TAB 4: COMPRADORES */}
-          {activeMenu === 'compradores' && (
-            <div className="data-table-card">
-              <div className="table-header-bar">
-                <h3 className="table-header-title">Lista de Leads de Compradores</h3>
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setEditingCompradorId(null);
-                    setCNome('');
-                    setCContacto('');
-                    setCOrcamento('');
-                    setCTipologias(['T2']);
-                    setCTiposImovel(['Apartamento']);
-                    setCZonas([]);
-                    setCObs('');
-                    setCFoiContactado(false);
-                    setCDataContacto('');
-                    setIsCompradorModalOpen(true);
-                  }}
-                >
-                  <Plus size={16} />
-                  <span>Registar Comprador</span>
-                </button>
+                  {/* Dropdown visto - Tipo Imóvel */}
+                  <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
+                    <button 
+                      type="button" 
+                      className="btn-filter-dropdown"
+                      onClick={() => {
+                        setShowImovelTiposDropdown(!showImovelTiposDropdown);
+                        setShowImovelTipologiasDropdown(false);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
+                    >
+                      Tipos ({fImovelTipos.length || 'Todos'})
+                    </button>
+                    {showImovelTiposDropdown && (
+                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '170px' }}>
+                        {tiposImovelDisponiveis.map(t => (
+                          <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={fImovelTipos.includes(t)}
+                              onChange={() => {
+                                if (fImovelTipos.includes(t)) {
+                                  setFImovelTipos(fImovelTipos.filter(x => x !== t));
+                                } else {
+                                  setFImovelTipos([...fImovelTipos, t]);
+                                }
+                              }}
+                            />
+                            {t}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dropdown visto - Tipologia */}
+                  <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
+                    <button 
+                      type="button" 
+                      className="btn-filter-dropdown"
+                      onClick={() => {
+                        setShowImovelTipologiasDropdown(!showImovelTipologiasDropdown);
+                        setShowImovelTiposDropdown(false);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
+                    >
+                      Tipologia ({fImovelTipologias.length || 'Todas'})
+                    </button>
+                    {showImovelTipologiasDropdown && (
+                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '120px' }}>
+                        {tipologiasDisponiveis.map(t => (
+                          <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={fImovelTipologias.includes(t)}
+                              onChange={() => {
+                                if (fImovelTipologias.includes(t)) {
+                                  setFImovelTipologias(fImovelTipologias.filter(x => x !== t));
+                                } else {
+                                  setFImovelTipologias([...fImovelTipologias, t]);
+                                }
+                              }}
+                            />
+                            {t}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Estado do Imovel */}
+                  <select 
+                    value={fImovelEstado} 
+                    onChange={e => setFImovelEstado(e.target.value)}
+                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
+                  >
+                    <option value="Todos">Todos os Estados</option>
+                    <option value="Ativo">🟢 Ativo</option>
+                    <option value="Reservado">🟡 Reservado</option>
+                    <option value="Vendido">🔴 Vendido</option>
+                    <option value="Inativo">⚫ Inativo</option>
+                  </select>
+
+                  {/* Origem do Contacto */}
+                  <select 
+                    value={fImovelOrigem} 
+                    onChange={e => setFImovelOrigem(e.target.value)}
+                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
+                  >
+                    <option value="Todos">Todas as Origens</option>
+                    {origensDisponiveis.map(o => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+
+                  {/* Ordenação */}
+                  <select 
+                    value={sortImoveisBy} 
+                    onChange={e => setSortImoveisBy(e.target.value)}
+                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)', marginLeft: 'auto' }}
+                  >
+                    <option value="data-desc">Mais Recentes</option>
+                    <option value="data-asc">Mais Antigos</option>
+                    <option value="alfabetica-asc">Nome Proprietário (A-Z)</option>
+                    <option value="alfabetica-desc">Nome Proprietário (Z-A)</option>
+                    <option value="preco-asc">Preço: Baixo para Alto</option>
+                    <option value="preco-desc">Preço: Alto para Baixo</option>
+                    <option value="area-desc">Área Útil (Maior)</option>
+                  </select>
+
+                </div>
+
+                {/* Slider Horizontal de Preço Máximo */}
+                <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    <span>Preço Máximo</span>
+                    <span style={{ color: 'var(--accent-gold)' }}>
+                      {fImovelPrecoMax === 1000000 ? 'Sem limite' : formatCurrency(fImovelPrecoMax)}
+                    </span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="50000" 
+                    max="1000000" 
+                    step="25000"
+                    value={fImovelPrecoMax}
+                    onChange={e => setFImovelPrecoMax(parseInt(e.target.value))}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--text-primary)' }}
+                  />
+                </div>
+
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="app-table">
-                  <thead>
-                    <tr>
-                      <th>Comprador</th>
-                      <th>Orçamento Máx.</th>
-                      <th>Preferências</th>
-                      <th>Zonas Pretendidas</th>
-                      <th>Urgência</th>
-                      <th>Último Contacto</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {compradores.map(comp => (
-                      <tr key={comp.id}>
-                        <td style={{ fontWeight: 700 }}>
-                          <div>{comp.comprador_nome}</div>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{comp.comprador_contacto}</span>
-                        </td>
-                        <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{formatCurrency(comp.orcamento_maximo)}</td>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.8rem' }}>
-                            <span>{comp.tipos_imovel_pretendidos.join(', ')}</span>
-                            <span style={{ color: 'var(--text-muted)' }}>{comp.tipologias_pretendidas.join(', ')}</span>
-                          </div>
-                        </td>
-                        <td>{comp.zonas_pretendidas.join(', ')}</td>
-                        <td>
-                          <span className={`badge badge-urgencia-${comp.urgencia}`}>
-                            {comp.urgencia}
-                          </span>
-                        </td>
-                        <td>
-                          {comp.foi_contactado ? (
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ color: 'var(--urgency-baixa)', fontWeight: 600, fontSize: '0.8rem' }}>Contactado</span>
-                              {comp.data_contacto && (
-                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                  {new Date(comp.data_contacto).toLocaleDateString('pt-PT')}
-                                </span>
-                              )}
+
+              {/* Tabela de Imóveis */}
+              <div className="data-table-card" style={{ marginTop: 0 }}>
+                <div className="table-header-bar">
+                  <h3 className="table-header-title">Lista de Propriedades ({getFilteredImoveis().length})</h3>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => {
+                      setEditingImovelId(null);
+                      setVNome('');
+                      setVContacto('');
+                      setVPrecoObj('');
+                      setVPrecoMin('');
+                      setVArea('');
+                      setVRua('');
+                      setVCidade('');
+                      setVFreguesia('');
+                      setVObs('');
+                      setVEstadoImovel('Ativo');
+                      setVOrigemContacto('Outro');
+                      setIsImovelModalOpen(true);
+                    }}
+                  >
+                    <Plus size={16} />
+                    <span>Adicionar Imóvel</span>
+                  </button>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="app-table">
+                    <thead>
+                      <tr>
+                        <th>Proprietário</th>
+                        <th>Imóvel</th>
+                        <th>Localização</th>
+                        <th>Preço Anunciado</th>
+                        <th>Área (m²)</th>
+                        <th>Estado Ficha</th>
+                        <th>Origem</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getFilteredImoveis().map(imovel => (
+                        <tr key={imovel.id}>
+                          <td style={{ fontWeight: 700 }}>
+                            <div>{imovel.proprietario_nome}</div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{imovel.proprietario_contacto}</span>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 600 }}>{imovel.tipo_imovel}</span>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}> ({imovel.tipologia})</span>
+                          </td>
+                          <td>{imovel.freguesia}, {imovel.cidade}</td>
+                          <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(imovel.preco_objetivo)}</td>
+                          <td>{imovel.area_m2} m²</td>
+                          <td>
+                            <span 
+                              className="badge"
+                              style={{
+                                border: '1px solid',
+                                backgroundColor: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa-bg)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media-bg)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta-bg)' : 'var(--bg-input)',
+                                color: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta)' : 'var(--text-secondary)',
+                              }}
+                            >
+                              {imovel.estado_imovel || 'Ativo'}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{imovel.origem_contacto || 'Outro'}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                onClick={() => startEditImovel(imovel)}
+                                className="btn btn-secondary" 
+                                style={{ padding: '4px 8px' }}
+                                title="Editar"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteImovel(imovel.id)}
+                                className="btn btn-secondary" 
+                                style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
+                                title="Eliminar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
-                          ) : (
-                            <span style={{ color: 'var(--urgency-alta)', fontWeight: 600, fontSize: '0.8rem' }}>Pendente</span>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
-                              onClick={() => startEditComprador(comp)}
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px' }}
-                              title="Editar"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteComprador(comp.id)}
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
-                              title="Eliminar"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {compradores.length === 0 && (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                          Nenhum comprador registado. Clica em "Registar Comprador" para começar.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                          </td>
+                        </tr>
+                      ))}
+                      {getFilteredImoveis().length === 0 && (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                            Nenhum imóvel corresponde aos filtros selecionados.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
 
-          {/* TAB 5: CALENDÁRIO REDESENHADO (WIDGET COMPACTO + AGENDA) */}
+          {/* TAB 4: COMPRADORES COM FILTROS AVANÇADOS */}
+          {activeMenu === 'compradores' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              {/* Painel de Filtros de Compradores */}
+              <div className="filters-panel-card" style={{ padding: '1.25rem', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-premium)' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  
+                  {/* Pesquisa Texto */}
+                  <div style={{ flex: '1 1 240px' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Pesquisar comprador, contacto ou observações..."
+                      value={fCompradorPesquisa}
+                      onChange={e => setFCompradorPesquisa(e.target.value)}
+                      style={{ width: '100%', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none' }}
+                    />
+                  </div>
+
+                  {/* Dropdown visto - Tipo Imóvel Pretendido */}
+                  <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
+                    <button 
+                      type="button" 
+                      className="btn-filter-dropdown"
+                      onClick={() => {
+                        setShowCompradorTiposDropdown(!showCompradorTiposDropdown);
+                        setShowCompradorTipologiasDropdown(false);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
+                    >
+                      Pretende Tipos ({fCompradorTipos.length || 'Todos'})
+                    </button>
+                    {showCompradorTiposDropdown && (
+                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '170px' }}>
+                        {tiposImovelDisponiveis.map(t => (
+                          <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={fCompradorTipos.includes(t)}
+                              onChange={() => {
+                                if (fCompradorTipos.includes(t)) {
+                                  setFCompradorTipos(fCompradorTipos.filter(x => x !== t));
+                                } else {
+                                  setFCompradorTipos([...fCompradorTipos, t]);
+                                }
+                              }}
+                            />
+                            {t}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dropdown visto - Tipologia Pretendida */}
+                  <div className="filter-dropdown-container" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
+                    <button 
+                      type="button" 
+                      className="btn-filter-dropdown"
+                      onClick={() => {
+                        setShowCompradorTipologiasDropdown(!showCompradorTipologiasDropdown);
+                        setShowCompradorTiposDropdown(false);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0.5rem 0.85rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', backgroundColor: 'var(--bg-card)', cursor: 'pointer' }}
+                    >
+                      Pretende Tipologias ({fCompradorTipologias.length || 'Todas'})
+                    </button>
+                    {showCompradorTipologiasDropdown && (
+                      <div className="filter-dropdown-menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100, boxShadow: 'var(--shadow-premium)', minWidth: '120px' }}>
+                        {tipologiasDisponiveis.map(t => (
+                          <label key={t} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={fCompradorTipologias.includes(t)}
+                              onChange={() => {
+                                if (fCompradorTipologias.includes(t)) {
+                                  setFCompradorTipologias(fCompradorTipologias.filter(x => x !== t));
+                                } else {
+                                  setFCompradorTipologias([...fCompradorTipologias, t]);
+                                }
+                              }}
+                            />
+                            {t}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Estado Comprador */}
+                  <select 
+                    value={fCompradorEstado} 
+                    onChange={e => setFCompradorEstado(e.target.value)}
+                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
+                  >
+                    <option value="Todos">Todos os Estados</option>
+                    <option value="Ativo">🟢 Ativo (Em Procura)</option>
+                    <option value="Negócio Fechado">🎉 Negócio Fechado</option>
+                    <option value="Inativo">⚫ Inativo</option>
+                  </select>
+
+                  {/* Origem Comprador */}
+                  <select 
+                    value={fCompradorOrigem} 
+                    onChange={e => setFCompradorOrigem(e.target.value)}
+                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)' }}
+                  >
+                    <option value="Todos">Todas as Origens</option>
+                    {origensDisponiveis.map(o => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+
+                  {/* Ordenação */}
+                  <select 
+                    value={sortCompradoresBy} 
+                    onChange={e => setSortCompradoresBy(e.target.value)}
+                    style={{ padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', outline: 'none', backgroundColor: 'var(--bg-card)', marginLeft: 'auto' }}
+                  >
+                    <option value="data-desc">Mais Recentes</option>
+                    <option value="data-asc">Mais Antigos</option>
+                    <option value="alfabetica-asc">Nome Comprador (A-Z)</option>
+                    <option value="alfabetica-desc">Nome Comprador (Z-A)</option>
+                    <option value="orcamento-asc">Orçamento: Baixo para Alto</option>
+                    <option value="orcamento-desc">Orçamento: Alto para Baixo</option>
+                  </select>
+
+                </div>
+
+                {/* Slider Horizontal de Orçamento Máximo */}
+                <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    <span>Orçamento Máximo</span>
+                    <span style={{ color: 'var(--accent-blue)' }}>
+                      {fCompradorOrcamentoMax === 1000000 ? 'Sem limite' : formatCurrency(fCompradorOrcamentoMax)}
+                    </span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="50000" 
+                    max="1000000" 
+                    step="25000"
+                    value={fCompradorOrcamentoMax}
+                    onChange={e => setFCompradorOrcamentoMax(parseInt(e.target.value))}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--text-primary)' }}
+                  />
+                </div>
+
+              </div>
+
+              {/* Tabela de Compradores */}
+              <div className="data-table-card" style={{ marginTop: 0 }}>
+                <div className="table-header-bar">
+                  <h3 className="table-header-title">Lista de Leads de Compradores ({getFilteredCompradores().length})</h3>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => {
+                      setEditingCompradorId(null);
+                      setCNome('');
+                      setCContacto('');
+                      setCOrcamento('');
+                      setCTipologias(['T2']);
+                      setCTiposImovel(['Apartamento']);
+                      setCZonas([]);
+                      setCObs('');
+                      setCFoiContactado(false);
+                      setCDataContacto('');
+                      setCEstadoComprador('Ativo');
+                      setCOrigemContacto('Outro');
+                      setIsCompradorModalOpen(true);
+                    }}
+                  >
+                    <Plus size={16} />
+                    <span>Registar Comprador</span>
+                  </button>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="app-table">
+                    <thead>
+                      <tr>
+                        <th>Comprador</th>
+                        <th>Orçamento Máx.</th>
+                        <th>Preferências</th>
+                        <th>Zonas Pretendidas</th>
+                        <th>Estado Ficha</th>
+                        <th>Origem</th>
+                        <th>Último Contacto</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getFilteredCompradores().map(comp => (
+                        <tr key={comp.id}>
+                          <td style={{ fontWeight: 700 }}>
+                            <div>{comp.comprador_nome}</div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{comp.comprador_contacto}</span>
+                          </td>
+                          <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{formatCurrency(comp.orcamento_maximo)}</td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.8rem' }}>
+                              <span>{comp.tipos_imovel_pretendidos.join(', ')}</span>
+                              <span style={{ color: 'var(--text-muted)' }}>{comp.tipologias_pretendidas.join(', ')}</span>
+                            </div>
+                          </td>
+                          <td>{comp.zonas_pretendidas.join(', ')}</td>
+                          <td>
+                            <span 
+                              className="badge"
+                              style={{
+                                border: '1px solid',
+                                backgroundColor: comp.estado_comprador === 'Ativo' ? 'var(--urgency-baixa-bg)' : comp.estado_comprador === 'Negócio Fechado' ? 'var(--accent-purple-bg)' : 'var(--bg-input)',
+                                color: comp.estado_comprador === 'Ativo' ? 'var(--urgency-baixa)' : comp.estado_comprador === 'Negócio Fechado' ? 'var(--accent-purple)' : 'var(--text-secondary)',
+                              }}
+                            >
+                              {comp.estado_comprador || 'Ativo'}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{comp.origem_contacto || 'Outro'}</td>
+                          <td>
+                            {comp.foi_contactado ? (
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ color: 'var(--urgency-baixa)', fontWeight: 600, fontSize: '0.8rem' }}>Contactado</span>
+                                {comp.data_contacto && (
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                    {new Date(comp.data_contacto).toLocaleDateString('pt-PT')}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--urgency-alta)', fontWeight: 600, fontSize: '0.8rem' }}>Pendente</span>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                onClick={() => startEditComprador(comp)}
+                                className="btn btn-secondary" 
+                                style={{ padding: '4px 8px' }}
+                                title="Editar"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteComprador(comp.id)}
+                                className="btn btn-secondary" 
+                                style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
+                                title="Eliminar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {getFilteredCompradores().length === 0 && (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                            Nenhum comprador corresponde aos filtros aplicados.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: CALENDÁRIO WIDGET COMPACTO */}
           {activeMenu === 'calendario' && (
             <div className="calendar-wrapper">
               
-              {/* Calendário Compacto estilo Widget */}
+              {/* Calendário Compacto */}
               <div className="calendar-main-card" style={{ maxWidth: '340px' }}>
                 <div className="calendar-header-nav">
                   <button onClick={prevMonth} className="btn-quick-action" style={{ backgroundColor: 'var(--bg-input)' }}>
@@ -1465,7 +1997,6 @@ function App() {
                   {renderCalendarDays()}
                 </div>
 
-                {/* Legendas dos Dots */}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '1.25rem', fontSize: '0.65rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <div className="calendar-event-dot dot-imovel" /> <span>Registo</span>
@@ -1482,7 +2013,7 @@ function App() {
                 </div>
               </div>
 
-              {/* Agenda Expandida de Atividades à Direita */}
+              {/* Agenda Diária */}
               <div className="calendar-activities-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
                   <h3 className="card-title" style={{ fontSize: '1.1rem' }}>
@@ -1497,7 +2028,6 @@ function App() {
                       setAssociarCliente(false);
                       setAssociarImovel(false);
                       
-                      // Configurar data de hoje local no datetime-local
                       const offset = selectedDay.getTimezoneOffset() * 60000;
                       const dateLocal = new Date(selectedDay.getTime() - offset).toISOString().slice(0, 16);
                       setActDataHora(dateLocal);
@@ -1534,11 +2064,9 @@ function App() {
                           )}
                         </div>
 
-                        {/* Botão para eliminar tarefas criadas manualmente */}
                         {evt.type === 'agenda' && (
                           <button 
                             onClick={() => handleDeleteAtividade(evt.originalId)}
-                            className="btn-close-modal"
                             style={{ 
                               position: 'absolute', 
                               right: '12px', 
@@ -1759,6 +2287,27 @@ function App() {
                 </select>
               </div>
 
+              {/* Origem Contacto (Novo) */}
+              <div className="form-group">
+                <label>Origem do Contacto*</label>
+                <select value={vOrigemContacto} onChange={(e) => setVOrigemContacto(e.target.value)}>
+                  {origensDisponiveis.map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Estado Acompanhamento Ficha (Novo) */}
+              <div className="form-group form-group-full">
+                <label>Estado de Acompanhamento (Etapa)*</label>
+                <select value={vEstadoImovel} onChange={(e) => setVEstadoImovel(e.target.value)}>
+                  <option value="Ativo">🟢 Ativo (Para Venda)</option>
+                  <option value="Reservado">🟡 Reservado (Sinalizado)</option>
+                  <option value="Vendido">🔴 Vendido (Escritura Realizada)</option>
+                  <option value="Inativo">⚫ Inativo / Suspenso</option>
+                </select>
+              </div>
+
               <div className="form-group form-group-full">
                 <label>Morada / Rua*</label>
                 <input 
@@ -1902,6 +2451,26 @@ function App() {
                 />
               </div>
 
+              {/* Origem Contacto Comprador (Novo) */}
+              <div className="form-group">
+                <label>Origem do Contacto*</label>
+                <select value={cOrigemContacto} onChange={(e) => setCOrigemContacto(e.target.value)}>
+                  {origensDisponiveis.map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Estado Acompanhamento Comprador (Novo) */}
+              <div className="form-group">
+                <label>Estado de Acompanhamento*</label>
+                <select value={cEstadoComprador} onChange={(e) => setCEstadoComprador(e.target.value)}>
+                  <option value="Ativo">🟢 Ativo (À Procura)</option>
+                  <option value="Negócio Fechado">🎉 Negócio Fechado</option>
+                  <option value="Inativo">⚫ Inativo / Arquivado</option>
+                </select>
+              </div>
+
               <div className="form-group form-group-full">
                 <label>Tipo de Propriedade Pretendida* (Múltiplo)</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
@@ -1954,7 +2523,7 @@ function App() {
                   <input 
                     type="text" 
                     value={cZonaInput}
-                    list="zonas-modal"
+                    list="c-zonas-list"
                     onChange={(e) => {
                       setCZonaInput(e.target.value);
                       fetchConcelhos(e.target.value);
@@ -1967,7 +2536,7 @@ function App() {
                       }
                     }}
                   />
-                  <datalist id="zonas-modal">
+                  <datalist id="c-zonas-list">
                     {concelhoSugestoes.map((c, idx) => <option key={idx} value={c} />)}
                   </datalist>
                   <button type="button" className="btn btn-secondary" onClick={handleAddZona}>
@@ -2054,7 +2623,7 @@ function App() {
         </div>
       )}
 
-      {/* MODAL 3: AGENDAR NOVA ATIVIDADE (Novo) */}
+      {/* MODAL 3: AGENDAR NOVA ATIVIDADE */}
       {isAtividadeModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content-card">
@@ -2099,7 +2668,6 @@ function App() {
                 />
               </div>
 
-              {/* BOTOES DE ASSOCIAÇÃO RAPIDA (Selecionar um ou outro, ou ambos) */}
               <div className="form-group form-group-full" style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '0.85rem 0', margin: '4px 0' }}>
                 <label className="checkbox-label">
                   <input type="checkbox" checked={associarCliente} onChange={e => setAssociarCliente(e.target.checked)} />
