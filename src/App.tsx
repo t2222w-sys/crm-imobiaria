@@ -771,6 +771,90 @@ function App() {
     setIsImportDecisionModalOpen(true);
   };
 
+  const handleVCardUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      let nome = '';
+      let telefone = '';
+      let email = '';
+
+      const lines = text.split(/\r?\n/);
+      for (const line of lines) {
+        if (line.toUpperCase().startsWith('FN:')) {
+          nome = line.substring(3).trim();
+        } else if (line.toUpperCase().startsWith('N:') && !nome) {
+          const parts = line.substring(2).split(';');
+          const firstName = parts[1] ? parts[1].trim() : '';
+          const lastName = parts[0] ? parts[0].trim() : '';
+          nome = `${firstName} ${lastName}`.trim();
+        } else if (line.toUpperCase().startsWith('TEL;') || line.toUpperCase().startsWith('TEL:')) {
+          const colonIndex = line.indexOf(':');
+          if (colonIndex !== -1) {
+            let num = line.substring(colonIndex + 1).trim();
+            telefone = num.replace(/[^\d+]/g, '');
+          }
+        } else if (line.toUpperCase().startsWith('EMAIL;') || line.toUpperCase().startsWith('EMAIL:')) {
+          const colonIndex = line.indexOf(':');
+          if (colonIndex !== -1) {
+            email = line.substring(colonIndex + 1).trim();
+          }
+        }
+      }
+
+      if (nome || telefone) {
+        setImportedContact({ 
+          nome: nome || 'Contacto Importado', 
+          telefone: telefone || 'Sem Telefone', 
+          email: email || '' 
+        });
+        setIsSimulatedContactsModalOpen(false);
+        setAssociationMode('decision');
+        setIsImportDecisionModalOpen(true);
+        showToast('Contacto importado via vCard com sucesso!');
+      } else {
+        showToast('Não foi possível extrair dados válidos do ficheiro .vcf', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSmartPasteContact = (text: string) => {
+    if (!text.trim()) return;
+
+    const phoneRegex = /(?:\+351)?[92][1236][0-9]{7}/g;
+    const phoneMatch = text.match(phoneRegex);
+    const telefone = phoneMatch ? phoneMatch[0] : '';
+
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const emailMatch = text.match(emailRegex);
+    const email = emailMatch ? emailMatch[0] : '';
+
+    let nome = text
+      .replace(telefone, '')
+      .replace(email, '')
+      .split('\n')[0]
+      .replace(/[^a-zA-ZáéíóúàèìòùâêîôûãõçÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÇ\s]/g, '')
+      .trim();
+
+    if (nome || telefone) {
+      setImportedContact({ 
+        nome: nome || 'Contacto Colado', 
+        telefone: telefone || 'Sem Telefone', 
+        email: email || '' 
+      });
+      setIsSimulatedContactsModalOpen(false);
+      setAssociationMode('decision');
+      setIsImportDecisionModalOpen(true);
+      showToast('Contacto processado via colagem inteligente!');
+    }
+  };
+
   const handleAssociateToImovel = async (imovelId: string) => {
     if (!importedContact) return;
     try {
@@ -3259,17 +3343,17 @@ function App() {
         </div>
       )}
 
-      {/* --- MODAL 4: SIMULAÇÃO DE SELEÇÃO DE CONTACTOS --- */}
+      {/* --- MODAL 4: SIMULAÇÃO E IMPORTAÇÃO DE CONTACTOS --- */}
       {isSimulatedContactsModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content-card" style={{ maxWidth: '420px' }}>
+          <div className="modal-content-card" style={{ maxWidth: '440px' }}>
             <div className="modal-header">
-              <h3 className="modal-title">Simulação: Contactos do Telemóvel</h3>
+              <h3 className="modal-title">Importar do Telemóvel</h3>
               <button className="modal-close-btn" onClick={() => setIsSimulatedContactsModalOpen(false)}>
                 <X size={20} />
               </button>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: window.innerWidth <= 900 ? '90px' : '1.5rem' }}>
               
               <div style={{
                 padding: '0.85rem',
@@ -3280,41 +3364,97 @@ function App() {
                 fontSize: '0.8rem',
                 lineHeight: '1.4'
               }}>
-                <strong>⚠️ Informação de Permissão do Dispositivo:</strong><br />
-                O navegador do seu telemóvel não forneceu acesso direto aos seus contactos reais (ou a permissão foi rejeitada). 
-                Exibimos este <strong>seletor simulado modelo</strong> com contactos de demonstração para poder testar o fluxo de CRM.
+                <strong>⚠️ Limitação do Dispositivo (ex: iOS/iPhone):</strong><br />
+                Por restrições de privacidade da Apple (iOS) e de alguns navegadores, o acesso direto à agenda de contactos é bloqueado em sites web.
               </div>
 
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
-                Selecione um dos contactos modelo de teste para continuar:
-              </p>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {contactosSimulados.map((c, idx) => (
-                  <div 
-                    key={idx} 
-                    onClick={() => handleSelectSimulatedContact(c)}
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between', 
-                      padding: '0.85rem', 
-                      border: '1px solid var(--border-color)', 
-                      borderRadius: 'var(--radius-md)', 
-                      backgroundColor: 'var(--bg-app)', 
-                      cursor: 'pointer',
-                      transition: 'var(--transition-smooth)'
-                    }}
-                    className="simulated-contact-item"
-                  >
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{c.nome}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.telefone}</div>
-                    </div>
-                    <Smartphone size={16} style={{ color: 'var(--text-muted)' }} />
-                  </div>
-                ))}
+              {/* Opção 1: Upload de vCard (.vcf) - Solução Premium Real */}
+              <div style={{ 
+                padding: '1rem', 
+                border: '2px dashed var(--accent-pink)', 
+                borderRadius: 'var(--radius-md)', 
+                backgroundColor: 'rgba(236, 72, 153, 0.03)', 
+                textAlign: 'center',
+                margin: '4px 0',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Importar Ficheiro vCard (.vcf)</span>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
+                  No iPhone: Abre o Contacto &rarr; Partilhar Contacto &rarr; Guardar em Ficheiros e escolhe-o aqui:
+                </p>
+                <label 
+                  className="btn btn-secondary" 
+                  style={{ 
+                    cursor: 'pointer', 
+                    padding: '8px 16px', 
+                    fontSize: '0.8rem', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '6px',
+                    backgroundColor: 'var(--text-primary)',
+                    color: 'white',
+                    border: 'none'
+                  }}
+                >
+                  <PlusCircle size={14} />
+                  <span>Selecionar Ficheiro .vcf</span>
+                  <input 
+                    type="file" 
+                    accept=".vcf" 
+                    onChange={handleVCardUpload} 
+                    style={{ display: 'none' }} 
+                  />
+                </label>
               </div>
+
+              {/* Opção 2: Colagem rápida */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-app)' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Colagem Rápida de Contacto:</span>
+                <textarea 
+                  rows={2}
+                  placeholder="Cole aqui o texto copiado (ex: João Silva 912345678)..."
+                  style={{ fontSize: '0.8rem', padding: '8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', width: '100%', boxSizing: 'border-box' }}
+                  onChange={(e) => handleSmartPasteContact(e.target.value)}
+                />
+              </div>
+
+              {/* Opção 3: Contactos de demonstração */}
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginTop: '4px' }}>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 8px 0', fontWeight: 700 }}>
+                  Ou simular com contactos modelo de teste:
+                </p>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {contactosSimulados.map((c, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => handleSelectSimulatedContact(c)}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        padding: '0.75rem', 
+                        border: '1px solid var(--border-color)', 
+                        borderRadius: 'var(--radius-md)', 
+                        backgroundColor: 'var(--bg-app)', 
+                        cursor: 'pointer',
+                        transition: 'var(--transition-smooth)'
+                      }}
+                      className="simulated-contact-item"
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{c.nome}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.telefone}</div>
+                      </div>
+                      <Smartphone size={16} style={{ color: 'var(--text-muted)' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
