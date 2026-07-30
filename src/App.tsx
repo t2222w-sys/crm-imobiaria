@@ -14,6 +14,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Edit2,
   Mail,
   FolderKanban,
@@ -32,6 +34,7 @@ interface Imovel {
   id: string;
   proprietario_nome: string;
   proprietario_contacto: string;
+  proprietario_email?: string;
   tipologia: string;
   tipo_imovel: string;
   preco_objetivo: number;
@@ -58,6 +61,7 @@ interface Comprador {
   id: string;
   comprador_nome: string;
   comprador_contacto: string;
+  comprador_email?: string;
   tipologias_pretendidas: string[];
   tipos_imovel_pretendidos: string[];
   orcamento_maximo: number;
@@ -79,8 +83,10 @@ interface Match {
   comprador_id: string;
   comprador_nome: string;
   comprador_urgencia: 'Alta' | 'Media' | 'Baixa';
+  comprador_email?: string;
   imovel_id: string;
   proprietario_nome: string;
+  proprietario_email?: string;
   tipologia: string;
   preco_objetivo: number;
   preco_minimo: number;
@@ -91,6 +97,11 @@ interface Match {
   notas_match?: string;
   interacao_id?: string;
   match_score: number;
+  valor_proposta?: number;
+  credito_aprovado?: 'Sim' | 'Nao' | 'N/A';
+  capital_proprio_valor?: number;
+  aguardar_credito?: boolean;
+  aguardar_avaliacao?: boolean;
 }
 
 interface Atividade {
@@ -147,6 +158,43 @@ const parseSafeDate = (dateStr: any): Date | null => {
 const getLocalDateFromISO = (isoStr: string) => {
   const date = parseSafeDate(isoStr);
   return date ? getLocalDateString(date) : '';
+};
+
+const triggerEmailClient = (email?: string | null, showToast?: (msg: string, type?: 'success' | 'error') => void) => {
+  if (!email) return;
+  
+  // Copiar para o clipboard como garantia/fallback
+  navigator.clipboard.writeText(email).then(() => {
+    if (showToast) {
+      showToast('E-mail copiado! Se a aplicação não abrir, cole-o diretamente.', 'success');
+    }
+  }).catch(() => {});
+
+  // Tentar abrir programaticamente
+  const link = document.createElement('a');
+  link.href = `mailto:${email}`;
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+const triggerPhoneClient = (phone?: string | null, showToast?: (msg: string, type?: 'success' | 'error') => void) => {
+  if (!phone) return;
+  
+  // Copiar para o clipboard como garantia/fallback
+  navigator.clipboard.writeText(phone).then(() => {
+    if (showToast) {
+      showToast('Contacto copiado! Se a chamada não iniciar, cole-o no discador.', 'success');
+    }
+  }).catch(() => {});
+
+  const link = document.createElement('a');
+  link.href = `tel:${phone}`;
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 function App() {
@@ -254,6 +302,7 @@ function App() {
   // Imóvel / Vendedor
   const [vNome, setVNome] = useState('');
   const [vContacto, setVContacto] = useState('');
+  const [vEmail, setVEmail] = useState('');
   const [vTipologia, setVTipologia] = useState('T2');
   const [vTipoImovel, setVTipoImovel] = useState('Apartamento');
   const [vPrecoObj, setVPrecoObj] = useState('');
@@ -272,10 +321,12 @@ function App() {
   const [vObs, setVObs] = useState('');
   const [vEstadoImovel, setVEstadoImovel] = useState('Ativo');
   const [vOrigemContacto, setVOrigemContacto] = useState('Outro');
+  const [vOrigemContactoPersonalizada, setVOrigemContactoPersonalizada] = useState('');
 
   // Lead / Comprador
   const [cNome, setCNome] = useState('');
   const [cContacto, setCContacto] = useState('');
+  const [cEmail, setCEmail] = useState('');
   const [cTipologias, setCTipologias] = useState<string[]>(['T2']);
   const [cTiposImovel, setCTiposImovel] = useState<string[]>(['Apartamento']);
   const [cOrcamento, setCOrcamento] = useState('');
@@ -290,6 +341,16 @@ function App() {
   const [cDataContacto, setCDataContacto] = useState('');
   const [cEstadoComprador, setCEstadoComprador] = useState('Ativo');
   const [cOrigemContacto, setCOrigemContacto] = useState('Outro');
+  const [cOrigemContactoPersonalizada, setCOrigemContactoPersonalizada] = useState('');
+
+  // Proposta e Imóvel associado ao Comprador
+  const [cAssociarImovel, setCAssociarImovel] = useState(false);
+  const [cImovelAssociadoId, setCImovelAssociadoId] = useState('');
+  const [cValorProposta, setCValorProposta] = useState('');
+  const [cCreditoAprovado, setCCreditoAprovado] = useState<'Sim' | 'Nao' | 'N/A'>('N/A');
+  const [cCapitalProprio, setCCapitalProprio] = useState('');
+  const [cAguardarCredito, setCAguardarCredito] = useState(false);
+  const [cAguardarAvaliacao, setCAguardarAvaliacao] = useState(false);
 
   // Atividade
   const [actTipos, setActTipos] = useState<string[]>([]);
@@ -371,6 +432,13 @@ function App() {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
   };
+
+  const selectedCompradorInfo = selectedMatchDetail 
+    ? compradores.find(c => c.id === selectedMatchDetail.comprador_id) 
+    : null;
+  const selectedImovelInfo = selectedMatchDetail 
+    ? vendedores.find(v => v.id === selectedMatchDetail.imovel_id) 
+    : null;
 
   // Fetch
   const fetchData = async () => {
@@ -498,6 +566,7 @@ function App() {
     const imovelPayload = {
       proprietario_nome: vNome,
       proprietario_contacto: vContacto,
+      proprietario_email: vEmail || null,
       tipologia: vTipologia,
       tipo_imovel: vTipoImovel,
       preco_objetivo: pObj,
@@ -515,7 +584,7 @@ function App() {
       urgencia: vUrgencia,
       observacoes: vObs || null,
       estado_imovel: vEstadoImovel,
-      origem_contacto: vOrigemContacto,
+      origem_contacto: vOrigemContacto === 'Outro' ? (vOrigemContactoPersonalizada || 'Outro') : vOrigemContacto,
       updated_at: new Date().toISOString()
     };
 
@@ -541,6 +610,7 @@ function App() {
       // Reset
       setVNome('');
       setVContacto('');
+      setVEmail('');
       setVTipologia('T2');
       setVTipoImovel('Apartamento');
       setVPrecoObj('');
@@ -557,6 +627,7 @@ function App() {
       setVObs('');
       setVEstadoImovel('Ativo');
       setVOrigemContacto('Outro');
+      setVOrigemContactoPersonalizada('');
       setImovelFormErrors([]);
       setIsImovelModalOpen(false);
       
@@ -588,6 +659,7 @@ function App() {
     const leadPayload = {
       comprador_nome: cNome,
       comprador_contacto: cContacto,
+      comprador_email: cEmail || null,
       tipologias_pretendidas: cTipologias,
       tipos_imovel_pretendidos: cTiposImovel,
       orcamento_maximo: parseFloat(cOrcamento),
@@ -600,11 +672,13 @@ function App() {
       foi_contactado: cFoiContactado,
       data_contacto: cFoiContactado && cDataContacto ? new Date(cDataContacto).toISOString() : null,
       estado_comprador: cEstadoComprador,
-      origem_contacto: cOrigemContacto,
+      origem_contacto: cOrigemContacto === 'Outro' ? (cOrigemContactoPersonalizada || 'Outro') : cOrigemContacto,
       updated_at: new Date().toISOString()
     };
 
     try {
+      let activeCompradorId = editingCompradorId;
+
       if (editingCompradorId) {
         const { error } = await supabase
           .from('compradores_leads')
@@ -613,19 +687,46 @@ function App() {
 
         if (error) throw error;
         showToast('Lead de comprador atualizada!');
-        setEditingCompradorId(null);
       } else {
-        const { error } = await supabase
+        const { data: insertedData, error } = await supabase
           .from('compradores_leads')
-          .insert([leadPayload]);
+          .insert([leadPayload])
+          .select();
 
         if (error) throw error;
         showToast('Lead de comprador registada!');
+        if (insertedData && insertedData.length > 0) {
+          activeCompradorId = insertedData[0].id;
+        }
+      }
+
+      // Lógica de Associação de Imóvel e Proposta
+      if (activeCompradorId && cAssociarImovel && cImovelAssociadoId) {
+        const { error: matchErr } = await supabase
+          .from('matches_interacoes')
+          .upsert(
+            {
+              comprador_id: activeCompradorId,
+              imovel_id: cImovelAssociadoId,
+              estado: 'Proposta Apresentada',
+              valor_proposta: cValorProposta ? parseFloat(cValorProposta) : null,
+              credito_aprovado: cCreditoAprovado,
+              capital_proprio_valor: cCapitalProprio ? parseFloat(cCapitalProprio) : null,
+              aguardar_credito: cAguardarCredito,
+              aguardar_avaliacao: cAguardarAvaliacao,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'comprador_id,imovel_id' }
+          );
+
+        if (matchErr) throw matchErr;
+        showToast('Proposta e imóvel associados com sucesso!');
       }
 
       // Reset
       setCNome('');
       setCContacto('');
+      setCEmail('');
       setCOrcamento('');
       setCTipologias(['T2']);
       setCTiposImovel(['Apartamento']);
@@ -639,8 +740,20 @@ function App() {
       setCDataContacto('');
       setCEstadoComprador('Ativo');
       setCOrigemContacto('Outro');
+      setCOrigemContactoPersonalizada('');
+      
+      // Reset proposta
+      setCAssociarImovel(false);
+      setCImovelAssociadoId('');
+      setCValorProposta('');
+      setCCreditoAprovado('N/A');
+      setCCapitalProprio('');
+      setCAguardarCredito(false);
+      setCAguardarAvaliacao(false);
+
       setCompradorFormErrors([]);
       setIsCompradorModalOpen(false);
+      setEditingCompradorId(null);
 
       fetchData();
     } catch (err: any) {
@@ -905,6 +1018,7 @@ function App() {
     
     setVNome(imovel.proprietario_nome);
     setVContacto(imovel.proprietario_contacto);
+    setVEmail(imovel.proprietario_email || '');
     setVTipologia(imovel.tipologia);
     setVTipoImovel(imovel.tipo_imovel);
     setVPrecoObj(imovel.preco_objetivo.toString());
@@ -922,7 +1036,15 @@ function App() {
     setVUrgencia(imovel.urgencia);
     setVObs(imovel.observacoes || '');
     setVEstadoImovel(imovel.estado_imovel || 'Ativo');
-    setVOrigemContacto(imovel.origem_contacto || 'Outro');
+    
+    const vOrigVal = imovel.origem_contacto || 'Outro';
+    if (origensDisponiveis.includes(vOrigVal) && vOrigVal !== 'Outro') {
+      setVOrigemContacto(vOrigVal);
+      setVOrigemContactoPersonalizada('');
+    } else {
+      setVOrigemContacto('Outro');
+      setVOrigemContactoPersonalizada(vOrigVal === 'Outro' ? '' : vOrigVal);
+    }
 
     setIsImovelModalOpen(true);
   };
@@ -932,6 +1054,7 @@ function App() {
 
     setCNome(comprador.comprador_nome);
     setCContacto(comprador.comprador_contacto);
+    setCEmail(comprador.comprador_email || '');
     setCTipologias(comprador.tipologias_pretendidas);
     setCTiposImovel(comprador.tipos_imovel_pretendidos);
     setCOrcamento(comprador.orcamento_maximo.toString());
@@ -943,7 +1066,15 @@ function App() {
     setCObs(comprador.observacoes || '');
     setCFoiContactado(comprador.foi_contactado);
     setCEstadoComprador(comprador.estado_comprador || 'Ativo');
-    setCOrigemContacto(comprador.origem_contacto || 'Outro');
+    
+    const cOrigVal = comprador.origem_contacto || 'Outro';
+    if (origensDisponiveis.includes(cOrigVal) && cOrigVal !== 'Outro') {
+      setCOrigemContacto(cOrigVal);
+      setCOrigemContactoPersonalizada('');
+    } else {
+      setCOrigemContacto('Outro');
+      setCOrigemContactoPersonalizada(cOrigVal === 'Outro' ? '' : cOrigVal);
+    }
     
     if (comprador.data_contacto) {
       const d = parseSafeDate(comprador.data_contacto);
@@ -956,6 +1087,28 @@ function App() {
       }
     } else {
       setCDataContacto('');
+    }
+
+    // Carregar informações de proposta e associação de imóvel se existirem
+    const proposalMatch = allMatches.find(
+      m => m.comprador_id === comprador.id && m.interacao_id && (m.valor_proposta !== null || m.estado_match === 'Proposta Apresentada')
+    );
+    if (proposalMatch) {
+      setCAssociarImovel(true);
+      setCImovelAssociadoId(proposalMatch.imovel_id);
+      setCValorProposta(proposalMatch.valor_proposta ? proposalMatch.valor_proposta.toString() : '');
+      setCCreditoAprovado(proposalMatch.credito_aprovado || 'N/A');
+      setCCapitalProprio(proposalMatch.capital_proprio_valor ? proposalMatch.capital_proprio_valor.toString() : '');
+      setCAguardarCredito(proposalMatch.aguardar_credito || false);
+      setCAguardarAvaliacao(proposalMatch.aguardar_avaliacao || false);
+    } else {
+      setCAssociarImovel(false);
+      setCImovelAssociadoId('');
+      setCValorProposta('');
+      setCCreditoAprovado('N/A');
+      setCCapitalProprio('');
+      setCAguardarCredito(false);
+      setCAguardarAvaliacao(false);
     }
 
     setIsCompradorModalOpen(true);
@@ -987,7 +1140,6 @@ function App() {
             comprador_id: compradorId,
             imovel_id: imovelId,
             estado: estado,
-            notes_match: notas,
             notas: notas,
             updated_at: new Date().toISOString()
           },
@@ -1498,6 +1650,7 @@ function App() {
                 setEditingImovelId(null);
                 setVNome('');
                 setVContacto('');
+                setVEmail('');
                 setVPrecoObj('');
                 setVPrecoMin('');
                 setVArea('');
@@ -1507,6 +1660,7 @@ function App() {
                 setVObs('');
                 setVEstadoImovel('Ativo');
                 setVOrigemContacto('Outro');
+                setVOrigemContactoPersonalizada('');
                 setIsImovelModalOpen(true);
               }}
             >
@@ -1519,6 +1673,7 @@ function App() {
                 setEditingCompradorId(null);
                 setCNome('');
                 setCContacto('');
+                setCEmail('');
                 setCOrcamento('');
                 setCTipologias(['T2']);
                 setCTiposImovel(['Apartamento']);
@@ -1528,6 +1683,7 @@ function App() {
                 setCDataContacto('');
                 setCEstadoComprador('Ativo');
                 setCOrigemContacto('Outro');
+                setCOrigemContactoPersonalizada('');
                 setIsCompradorModalOpen(true);
               }}
             >
@@ -1746,6 +1902,7 @@ function App() {
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
                       onSelectMatchDetail={setSelectedMatchDetail}
+                      showToast={showToast}
                     />
                   ))}
                 </div>
@@ -1768,6 +1925,7 @@ function App() {
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
                       onSelectMatchDetail={setSelectedMatchDetail}
+                      showToast={showToast}
                     />
                   ))}
                 </div>
@@ -1790,6 +1948,7 @@ function App() {
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
                       onSelectMatchDetail={setSelectedMatchDetail}
+                      showToast={showToast}
                     />
                   ))}
                 </div>
@@ -1812,6 +1971,7 @@ function App() {
                       onToggleContacto={handleToggleContactoRapido}
                       onEditComprador={startEditComprador}
                       onSelectMatchDetail={setSelectedMatchDetail}
+                      showToast={showToast}
                     />
                   ))}
                 </div>
@@ -1965,6 +2125,7 @@ function App() {
                         setEditingImovelId(null);
                         setVNome('');
                         setVContacto('');
+                        setVEmail('');
                         setVPrecoObj('');
                         setVPrecoMin('');
                         setVArea('');
@@ -1974,6 +2135,7 @@ function App() {
                         setVObs('');
                         setVEstadoImovel('Ativo');
                         setVOrigemContacto('Outro');
+                        setVOrigemContactoPersonalizada('');
                         setIsImovelModalOpen(true);
                       }}
                     >
@@ -2000,9 +2162,34 @@ function App() {
                     <tbody>
                       {getFilteredImoveis().map(imovel => (
                         <tr key={imovel.id}>
-                          <td style={{ fontWeight: 700 }}>
-                            <div>{imovel.proprietario_nome}</div>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{imovel.proprietario_contacto}</span>
+                          <td>
+                            <div style={{ fontWeight: 700 }}>{imovel.proprietario_nome}</div>
+                            <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', marginTop: '2px' }}>
+                              <a 
+                                href={`tel:${imovel.proprietario_contacto}`} 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  triggerPhoneClient(imovel.proprietario_contacto, showToast);
+                                }}
+                                style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
+                                title="Ligar"
+                              >
+                                <Phone size={10} /> {imovel.proprietario_contacto}
+                              </a>
+                              {imovel.proprietario_email && (
+                                <a 
+                                  href={`mailto:${imovel.proprietario_email}`} 
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    triggerEmailClient(imovel.proprietario_email, showToast);
+                                  }}
+                                  style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
+                                  title="Enviar E-mail"
+                                >
+                                  <Mail size={10} /> {imovel.proprietario_email}
+                                </a>
+                              )}
+                            </div>
                           </td>
                           <td>
                             <span style={{ fontWeight: 600 }}>{imovel.tipo_imovel}</span>
@@ -2077,9 +2264,32 @@ function App() {
                         </div>
                         
                         <div className="mobile-card-body">
-                          <div className="mobile-card-detail">
+                          <div className="mobile-card-detail" style={{ alignItems: 'center' }}>
                             <span className="detail-label">Contacto:</span>
-                            <span className="detail-value">{imovel.proprietario_contacto}</span>
+                            <span className="detail-value" style={{ display: 'flex', gap: '10px' }}>
+                              <a 
+                                href={`tel:${imovel.proprietario_contacto}`} 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  triggerPhoneClient(imovel.proprietario_contacto, showToast);
+                                }}
+                                style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <Phone size={12} /> {imovel.proprietario_contacto}
+                              </a>
+                              {imovel.proprietario_email && (
+                                <a 
+                                  href={`mailto:${imovel.proprietario_email}`} 
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    triggerEmailClient(imovel.proprietario_email, showToast);
+                                  }}
+                                  style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                >
+                                  <Mail size={12} /> E-mail
+                                </a>
+                              )}
+                            </span>
                           </div>
                           <div className="mobile-card-detail">
                             <span className="detail-label">Tipo:</span>
@@ -2269,6 +2479,7 @@ function App() {
                         setEditingCompradorId(null);
                         setCNome('');
                         setCContacto('');
+                        setCEmail('');
                         setCOrcamento('');
                         setCTipologias(['T2']);
                         setCTiposImovel(['Apartamento']);
@@ -2278,6 +2489,7 @@ function App() {
                         setCDataContacto('');
                         setCEstadoComprador('Ativo');
                         setCOrigemContacto('Outro');
+                        setCOrigemContactoPersonalizada('');
                         setIsCompradorModalOpen(true);
                       }}
                     >
@@ -2304,9 +2516,34 @@ function App() {
                     <tbody>
                       {getFilteredCompradores().map(comp => (
                         <tr key={comp.id}>
-                          <td style={{ fontWeight: 700 }}>
-                            <div>{comp.comprador_nome}</div>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{comp.comprador_contacto}</span>
+                          <td>
+                            <div style={{ fontWeight: 700 }}>{comp.comprador_nome}</div>
+                            <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', marginTop: '2px' }}>
+                              <a 
+                                href={`tel:${comp.comprador_contacto}`} 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  triggerPhoneClient(comp.comprador_contacto, showToast);
+                                }}
+                                style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
+                                title="Ligar"
+                              >
+                                <Phone size={10} /> {comp.comprador_contacto}
+                              </a>
+                              {comp.comprador_email && (
+                                <a 
+                                  href={`mailto:${comp.comprador_email}`} 
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    triggerEmailClient(comp.comprador_email, showToast);
+                                  }}
+                                  style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
+                                  title="Enviar E-mail"
+                                >
+                                  <Mail size={10} /> {comp.comprador_email}
+                                </a>
+                              )}
+                            </div>
                           </td>
                           <td style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{formatCurrency(comp.orcamento_maximo)}</td>
                           <td>
@@ -2399,9 +2636,32 @@ function App() {
                         </div>
                         
                         <div className="mobile-card-body">
-                          <div className="mobile-card-detail">
+                          <div className="mobile-card-detail" style={{ alignItems: 'center' }}>
                             <span className="detail-label">Contacto:</span>
-                            <span className="detail-value">{comp.comprador_contacto}</span>
+                            <span className="detail-value" style={{ display: 'flex', gap: '10px' }}>
+                              <a 
+                                href={`tel:${comp.comprador_contacto}`} 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  triggerPhoneClient(comp.comprador_contacto, showToast);
+                                }}
+                                style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <Phone size={12} /> {comp.comprador_contacto}
+                              </a>
+                              {comp.comprador_email && (
+                                <a 
+                                  href={`mailto:${comp.comprador_email}`} 
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    triggerEmailClient(comp.comprador_email, showToast);
+                                  }}
+                                  style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                >
+                                  <Mail size={12} /> E-mail
+                                </a>
+                              )}
+                            </span>
                           </div>
                           <div className="mobile-card-detail">
                             <span className="detail-label">Orçamento Máx:</span>
@@ -2753,6 +3013,16 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label>E-mail do Proprietário</label>
+                <input 
+                  type="email" 
+                  value={vEmail}
+                  onChange={(e) => setVEmail(e.target.value)}
+                  placeholder="Ex: manuel@email.com"
+                />
+              </div>
+
+              <div className="form-group">
                 <label>Tipo de Imóvel*</label>
                 <select value={vTipoImovel} onChange={(e) => setVTipoImovel(e.target.value)}>
                   {tiposImovelDisponiveis.map(t => (
@@ -2858,6 +3128,19 @@ function App() {
                   ))}
                 </select>
               </div>
+
+              {vOrigemContacto === 'Outro' && (
+                <div className="form-group">
+                  <label>Especificar Outra Origem*</label>
+                  <input 
+                    type="text"
+                    value={vOrigemContactoPersonalizada}
+                    onChange={(e) => setVOrigemContactoPersonalizada(e.target.value)}
+                    placeholder="Ex: Nome da pessoa ou recomendação..."
+                    required
+                  />
+                </div>
+              )}
 
               <div className="form-group form-group-full">
                 <label>Estado de Acompanhamento (Etapa)*</label>
@@ -3028,6 +3311,16 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label>E-mail do Comprador</label>
+                <input 
+                  type="email" 
+                  value={cEmail}
+                  onChange={(e) => setCEmail(e.target.value)}
+                  placeholder="Ex: carolina@email.com"
+                />
+              </div>
+
+              <div className="form-group">
                 <label>Orçamento Máximo (€)*</label>
                 <input 
                   type="number" 
@@ -3052,6 +3345,19 @@ function App() {
                   ))}
                 </select>
               </div>
+
+              {cOrigemContacto === 'Outro' && (
+                <div className="form-group">
+                  <label>Especificar Outra Origem*</label>
+                  <input 
+                    type="text"
+                    value={cOrigemContactoPersonalizada}
+                    onChange={(e) => setCOrigemContactoPersonalizada(e.target.value)}
+                    placeholder="Ex: Nome da pessoa ou recomendação..."
+                    required
+                  />
+                </div>
+              )}
 
               <div className="form-group">
                 <label>Estado de Acompanhamento*</label>
@@ -3225,6 +3531,106 @@ function App() {
                   onChange={(e) => setCObs(e.target.value)}
                   placeholder="Notas adicionais sobre o perfil..."
                 />
+              </div>
+
+              {/* Associação de Imóvel e Proposta */}
+              <div className="form-group form-group-full" style={{ 
+                borderTop: '1px solid var(--border-color)', 
+                paddingTop: '1.25rem', 
+                marginTop: '0.5rem' 
+              }}>
+                <label className="checkbox-label" style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={cAssociarImovel} 
+                    onChange={e => setCAssociarImovel(e.target.checked)} 
+                  />
+                  Associar Imóvel e Detalhes da Proposta?
+                </label>
+
+                {cAssociarImovel && (
+                  <div style={{
+                    marginTop: '1rem',
+                    padding: '1.25rem',
+                    backgroundColor: 'rgba(197, 168, 128, 0.05)',
+                    border: '1px dashed var(--accent-gold)',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '1rem'
+                  }} className="proposal-section">
+                    
+                    <div className="form-group form-group-full" style={{ gridColumn: 'span 2' }}>
+                      <label style={{ fontWeight: 600 }}>Escolher Imóvel Existente*</label>
+                      <select 
+                        value={cImovelAssociadoId} 
+                        onChange={e => setCImovelAssociadoId(e.target.value)}
+                        required={cAssociarImovel}
+                      >
+                        <option value="">-- Selecione um imóvel da lista --</option>
+                        {vendedores.map(imovel => (
+                          <option key={imovel.id} value={imovel.id}>
+                            {imovel.proprietario_nome} - {imovel.tipo_imovel} ({imovel.tipologia}) em {imovel.cidade} - {formatCurrency(imovel.preco_objetivo)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ fontWeight: 600 }}>Valor da Proposta (€)*</label>
+                      <input 
+                        type="number"
+                        value={cValorProposta}
+                        onChange={e => setCValorProposta(e.target.value)}
+                        placeholder="Ex: 245000"
+                        required={cAssociarImovel}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ fontWeight: 600 }}>Crédito Bancário Aprovado?*</label>
+                      <select 
+                        value={cCreditoAprovado} 
+                        onChange={e => setCCreditoAprovado(e.target.value as any)}
+                        required={cAssociarImovel}
+                      >
+                        <option value="N/A">Não se Aplica / Sem Crédito</option>
+                        <option value="Sim">Sim (Crédito Aprovado)</option>
+                        <option value="Nao">Não (Recusado ou Sem resposta)</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ fontWeight: 600 }}>Valor do Capital Próprio (€)</label>
+                      <input 
+                        type="number"
+                        value={cCapitalProprio}
+                        onChange={e => setCCapitalProprio(e.target.value)}
+                        placeholder="Ex: 50000"
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+                      <label className="checkbox-label" style={{ margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={cAguardarCredito} 
+                          onChange={e => setCAguardarCredito(e.target.checked)} 
+                        />
+                        A aguardar decisão de crédito
+                      </label>
+                      <label className="checkbox-label" style={{ margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={cAguardarAvaliacao} 
+                          onChange={e => setCAguardarAvaliacao(e.target.checked)} 
+                        />
+                        A aguardar avaliação bancária
+                      </label>
+                    </div>
+
+                  </div>
+                )}
               </div>
 
               <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
@@ -3490,6 +3896,7 @@ function App() {
                       setIsImportDecisionModalOpen(false);
                       setCNome(importedContact.nome);
                       setCContacto(importedContact.telefone);
+                      setCEmail(importedContact.email || '');
                       setCOrcamento('');
                       setCTipologias(['T2']);
                       setCTiposImovel(['Apartamento']);
@@ -3498,6 +3905,7 @@ function App() {
                       setCFoiContactado(false);
                       setCEstadoComprador('Ativo');
                       setCOrigemContacto('Outro');
+                      setCOrigemContactoPersonalizada('');
                       setIsCompradorModalOpen(true);
                     }}
                     style={{ justifyContent: 'center' }}
@@ -3512,6 +3920,7 @@ function App() {
                       setIsImportDecisionModalOpen(false);
                       setVNome(importedContact.nome);
                       setVContacto(importedContact.telefone);
+                      setVEmail(importedContact.email || '');
                       setVPrecoObj('');
                       setVPrecoMin('');
                       setVArea('');
@@ -3521,6 +3930,7 @@ function App() {
                       setVObs('');
                       setVEstadoImovel('Ativo');
                       setVOrigemContacto('Outro');
+                      setVOrigemContactoPersonalizada('');
                       setIsImovelModalOpen(true);
                     }}
                     style={{ justifyContent: 'center' }}
@@ -3620,14 +4030,43 @@ function App() {
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr', gap: '8px', fontSize: '0.85rem' }}>
                   <div><strong>Nome:</strong> {selectedMatchDetail.comprador_nome}</div>
-                  <div><strong>Contacto:</strong> {compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.comprador_contacto || 'Não disponível'}</div>
-                  <div><strong>Orçamento Máx:</strong> {formatCurrency(compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.orcamento_maximo || 0)}</div>
+                  <div>
+                    <strong>Contacto:</strong>{' '}
+                    {selectedCompradorInfo?.comprador_contacto ? (
+                      <a 
+                        href={`tel:${selectedCompradorInfo.comprador_contacto}`} 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          triggerPhoneClient(selectedCompradorInfo.comprador_contacto, showToast);
+                        }}
+                        style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Phone size={12} /> {selectedCompradorInfo.comprador_contacto}
+                      </a>
+                    ) : 'Não disponível'}
+                  </div>
+                  <div>
+                    <strong>E-mail:</strong>{' '}
+                    {selectedCompradorInfo?.comprador_email ? (
+                      <a 
+                        href={`mailto:${selectedCompradorInfo.comprador_email}`} 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          triggerEmailClient(selectedCompradorInfo.comprador_email, showToast);
+                        }}
+                        style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Mail size={12} /> {selectedCompradorInfo.comprador_email}
+                      </a>
+                    ) : 'Não registado'}
+                  </div>
+                  <div><strong>Orçamento Máx:</strong> {formatCurrency(selectedCompradorInfo?.orcamento_maximo || 0)}</div>
                   <div><strong>Urgência:</strong> {selectedMatchDetail.comprador_urgencia}</div>
                   <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}>
-                    <strong>Zonas Pretendidas:</strong> {compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.zonas_pretendidas.join(', ') || 'Nenhuma'}
+                    <strong>Zonas Pretendidas:</strong> {selectedCompradorInfo?.zonas_pretendidas.join(', ') || 'Nenhuma'}
                   </div>
                   <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}>
-                    <strong>Observações do Cliente:</strong> {compradores.find(c => c.id === selectedMatchDetail.comprador_id)?.observacoes || 'Sem notas de perfil.'}
+                    <strong>Observações do Cliente:</strong> {selectedCompradorInfo?.observacoes || 'Sem notas de perfil.'}
                   </div>
                 </div>
               </div>
@@ -3640,24 +4079,114 @@ function App() {
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr', gap: '8px', fontSize: '0.85rem' }}>
                   <div><strong>Proprietário (Dono):</strong> {selectedMatchDetail.proprietario_nome}</div>
-                  <div><strong>Contacto do Dono:</strong> {vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.proprietario_contacto || 'Não disponível'}</div>
-                  <div><strong>Tipo de Imóvel:</strong> {vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tipo_imovel} ({selectedMatchDetail.tipologia})</div>
+                  <div>
+                    <strong>Contacto do Dono:</strong>{' '}
+                    {selectedImovelInfo?.proprietario_contacto ? (
+                      <a 
+                        href={`tel:${selectedImovelInfo.proprietario_contacto}`} 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          triggerPhoneClient(selectedImovelInfo.proprietario_contacto, showToast);
+                        }}
+                        style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Phone size={12} /> {selectedImovelInfo.proprietario_contacto}
+                      </a>
+                    ) : 'Não disponível'}
+                  </div>
+                  <div>
+                    <strong>E-mail do Dono:</strong>{' '}
+                    {selectedImovelInfo?.proprietario_email ? (
+                      <a 
+                        href={`mailto:${selectedImovelInfo.proprietario_email}`} 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          triggerEmailClient(selectedImovelInfo.proprietario_email, showToast);
+                        }}
+                        style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Mail size={12} /> {selectedImovelInfo.proprietario_email}
+                      </a>
+                    ) : 'Não registado'}
+                  </div>
+                  <div><strong>Tipo de Imóvel:</strong> {selectedImovelInfo?.tipo_imovel} ({selectedMatchDetail.tipologia})</div>
                   <div><strong>Preço Anunciado:</strong> {formatCurrency(selectedMatchDetail.preco_objetivo)}</div>
                   <div><strong>Preço Mín. Aceitável:</strong> {formatCurrency(selectedMatchDetail.preco_minimo)}</div>
-                  <div><strong>Área Útil:</strong> {vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.area_m2 || 0} m²</div>
+                  <div><strong>Área Útil:</strong> {selectedImovelInfo?.area_m2 || 0} m²</div>
                   <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}><strong>Morada / Localização:</strong> {selectedMatchDetail.freguesia}, {selectedMatchDetail.cidade}</div>
                   <div style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 2' }}>
                     <strong>Características:</strong> {
                       [
-                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_garagem && 'Garagem',
-                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_elevador && 'Elevador',
-                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_quintal && 'Espaço Exterior (Quintal)',
-                        vendedores.find(v => v.id === selectedMatchDetail.imovel_id)?.tem_arrecadacao && 'Arrecadação'
+                        selectedImovelInfo?.tem_garagem && 'Garagem',
+                        selectedImovelInfo?.tem_elevador && 'Elevador',
+                        selectedImovelInfo?.tem_quintal && 'Espaço Exterior (Quintal)',
+                        selectedImovelInfo?.tem_arrecadacao && 'Arrecadação'
                       ].filter(Boolean).join(', ') || 'Nenhuma'
                     }
                   </div>
                 </div>
               </div>
+
+              {/* Proposta & Condições Financeiras (Se houver valor de proposta) */}
+              {(selectedMatchDetail.valor_proposta !== null && selectedMatchDetail.valor_proposta !== undefined) && (
+                <div style={{ 
+                  padding: '1rem', 
+                  border: '1px solid var(--accent-gold)', 
+                  borderRadius: 'var(--radius-md)', 
+                  backgroundColor: 'rgba(197, 168, 128, 0.03)' 
+                }}>
+                  <h4 style={{ fontWeight: 700, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                    <Sparkles size={18} />
+                    <span>Detalhes da Proposta Comercial</span>
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr', gap: '8px', fontSize: '0.85rem' }}>
+                    <div>
+                      <strong>Valor Proposto:</strong>{' '}
+                      <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {formatCurrency(selectedMatchDetail.valor_proposta)}
+                      </span>
+                      {selectedMatchDetail.valor_proposta < selectedMatchDetail.preco_objetivo && (
+                        <span style={{ fontSize: '0.725rem', color: 'var(--urgency-alta)', marginLeft: '6px', fontWeight: 600 }}>
+                          ({formatCurrency(selectedMatchDetail.preco_objetivo - selectedMatchDetail.valor_proposta)} abaixo do preço)
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>Crédito Bancário Aprovado?</strong>{' '}
+                      <span className="badge" style={{
+                        backgroundColor: selectedMatchDetail.credito_aprovado === 'Sim' ? 'var(--urgency-baixa-bg)' : selectedMatchDetail.credito_aprovado === 'Nao' ? 'var(--urgency-alta-bg)' : 'var(--bg-input)',
+                        color: selectedMatchDetail.credito_aprovado === 'Sim' ? 'var(--urgency-baixa)' : selectedMatchDetail.credito_aprovado === 'Nao' ? 'var(--urgency-alta)' : 'var(--text-secondary)',
+                        border: '1px solid transparent'
+                      }}>
+                        {selectedMatchDetail.credito_aprovado === 'Sim' ? '🟢 Sim' : selectedMatchDetail.credito_aprovado === 'Nao' ? '🔴 Não' : '⚪ Não se Aplica'}
+                      </span>
+                    </div>
+                    <div>
+                      <strong>Capital Próprio:</strong>{' '}
+                      <span style={{ fontWeight: 600 }}>
+                        {selectedMatchDetail.capital_proprio_valor !== null && selectedMatchDetail.capital_proprio_valor !== undefined
+                          ? formatCurrency(selectedMatchDetail.capital_proprio_valor)
+                          : 'Não especificado'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {selectedMatchDetail.aguardar_credito && (
+                        <span className="badge" style={{ backgroundColor: 'var(--urgency-media-bg)', color: 'var(--urgency-media)', border: '1px solid transparent' }}>
+                          ⏳ Aguarda Crédito
+                        </span>
+                      )}
+                      {selectedMatchDetail.aguardar_avaliacao && (
+                        <span className="badge" style={{ backgroundColor: 'var(--accent-purple-bg)', color: 'var(--accent-purple)', border: '1px solid transparent' }}>
+                          ⚖️ Aguarda Avaliação
+                        </span>
+                      )}
+                      {!selectedMatchDetail.aguardar_credito && !selectedMatchDetail.aguardar_avaliacao && (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Sem pendências de aprovação</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Notas de Acompanhamento */}
               <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
@@ -3704,16 +4233,18 @@ interface KanbanCardProps {
   compradores: Comprador[];
   vendedores: Imovel[];
   onStatusChange: (compradorId: string, imovelId: string, estado: string, notas: string) => Promise<void>;
-  onToggleContacto: (compradorId: string, foiContactado: boolean) => Promise<void>;
+  onToggleContacto?: (compradorId: string, foiContactado: boolean) => Promise<void>;
   onEditComprador: (comp: Comprador) => void;
   onSelectMatchDetail: (match: Match) => void;
+  showToast?: (msg: string, type?: 'success' | 'error') => void;
 }
 
-function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleContacto, onEditComprador, onSelectMatchDetail }: KanbanCardProps) {
+function KanbanCard({ match, compradores, vendedores, onStatusChange, onEditComprador, onSelectMatchDetail, showToast }: KanbanCardProps) {
   const compradorDetalhe = compradores.find(c => c.id === match.comprador_id);
   const imovelDetalhe = vendedores.find(v => v.id === match.imovel_id);
   
   const [localNotas, setLocalNotas] = useState(match.notas_match || '');
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     setLocalNotas(match.notas_match || '');
@@ -3735,11 +4266,57 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
 
   const badgeProps = getProfileClassAndLabel();
 
+  // Caso colapsado (defeito): Apenas mostra o nome do lead e um botão para abrir
+  if (!isExpanded) {
+    return (
+      <div 
+        className="kanban-card collapsed" 
+        onClick={() => setIsExpanded(true)} 
+        style={{ 
+          cursor: 'pointer', 
+          padding: '0.75rem 1rem',
+          transition: 'all 0.2s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0
+        }}
+      >
+        <div className="card-top" style={{ marginBottom: 0, alignItems: 'center', width: '100%' }}>
+          <div className="card-user-info" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="user-avatar-circle" style={{ width: '32px', height: '32px', fontSize: '0.85rem', flexShrink: 0 }}>
+              {iniciais}
+            </div>
+            <div className="user-meta" style={{ display: 'flex', flexDirection: 'column' }}>
+              <span className="user-name" style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>{match.comprador_nome}</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Score: {match.match_score}%</span>
+            </div>
+          </div>
+          <div className="card-actions-quick" style={{ gap: '8px', display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+            <ChevronDown size={16} style={{ color: 'var(--text-muted)' }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Caso expandido: Mostra todas as informações
   return (
-    <div className="kanban-card">
-      <div className="card-top">
+    <div className="kanban-card expanded" style={{ transition: 'all 0.2s ease' }}>
+      <div 
+        className="card-top" 
+        onClick={() => setIsExpanded(false)} 
+        style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}
+      >
         <div className="card-user-info">
-          <div className="user-avatar-circle" onClick={() => compradorDetalhe && onEditComprador(compradorDetalhe)} style={{ cursor: 'pointer' }} title="Editar Perfil">
+          <div 
+            className="user-avatar-circle" 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              compradorDetalhe && onEditComprador(compradorDetalhe); 
+            }} 
+            style={{ cursor: 'pointer' }} 
+            title="Editar Perfil"
+          >
             {iniciais}
           </div>
           <div className="user-meta">
@@ -3748,18 +4325,59 @@ function KanbanCard({ match, compradores, vendedores, onStatusChange, onToggleCo
           </div>
         </div>
 
-        <div className="card-actions-quick">
-          <button 
+        <div className="card-actions-quick" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <a 
+            href={compradorDetalhe?.comprador_contacto ? `tel:${compradorDetalhe.comprador_contacto}` : '#'}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (compradorDetalhe?.comprador_contacto) {
+                triggerPhoneClient(compradorDetalhe.comprador_contacto, showToast);
+              }
+            }}
             className="btn-quick-action phone" 
-            title={compradorDetalhe?.foi_contactado ? 'Já contactado' : 'Marcar como Contactado'}
-            onClick={() => onToggleContacto(match.comprador_id, !compradorDetalhe?.foi_contactado)}
-            style={{ backgroundColor: compradorDetalhe?.foi_contactado ? 'var(--urgency-baixa-bg)' : 'var(--accent-blue-bg)', color: compradorDetalhe?.foi_contactado ? 'var(--urgency-baixa)' : 'var(--accent-blue)' }}
+            title={compradorDetalhe?.comprador_contacto ? `Ligar para ${compradorDetalhe.comprador_contacto}` : 'Sem contacto'}
+            style={{ 
+              backgroundColor: compradorDetalhe?.foi_contactado ? 'var(--urgency-baixa-bg)' : 'var(--accent-blue-bg)', 
+              color: compradorDetalhe?.foi_contactado ? 'var(--urgency-baixa)' : 'var(--accent-blue)',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
           >
             <Phone size={14} />
-          </button>
-          <a href={`mailto:${match.comprador_nome.toLowerCase().replace(' ', '')}@email.com`} className="btn-quick-action email" title="Enviar E-mail">
+          </a>
+          <a 
+            href={compradorDetalhe?.comprador_email ? `mailto:${compradorDetalhe.comprador_email}` : '#'} 
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (compradorDetalhe?.comprador_email) {
+                triggerEmailClient(compradorDetalhe.comprador_email, showToast);
+              }
+            }}
+            className="btn-quick-action email" 
+            title={compradorDetalhe?.comprador_email ? `Enviar e-mail para ${compradorDetalhe.comprador_email}` : 'Sem e-mail'}
+            style={{ 
+              opacity: compradorDetalhe?.comprador_email ? 1 : 0.4, 
+              pointerEvents: compradorDetalhe?.comprador_email ? 'auto' : 'none',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
             <Mail size={14} />
           </a>
+          <button 
+            className="btn-quick-action" 
+            title="Recolher" 
+            onClick={() => setIsExpanded(false)} 
+            style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', padding: '4px', cursor: 'pointer' }}
+          >
+            <ChevronUp size={16} style={{ color: 'var(--text-muted)' }} />
+          </button>
         </div>
       </div>
 

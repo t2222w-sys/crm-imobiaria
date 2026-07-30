@@ -66,15 +66,6 @@ body {
   overflow: hidden;
 }
 
-@media (max-width: 900px) {
-  .app-container {
-    grid-template-columns: 1fr;
-  }
-  .app-sidebar {
-    display: none; /* Em mobile podemos esconder ou colapsar */
-  }
-}
-
 /* Barra Lateral Esquerda */
 .app-sidebar {
   background-color: var(--bg-sidebar);
@@ -83,6 +74,15 @@ body {
   flex-direction: column;
   padding: 2rem 1.25rem;
   overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .app-container {
+    grid-template-columns: 1fr;
+  }
+  .app-sidebar {
+    display: none !important; /* Em mobile esconde por completo a barra lateral do desktop */
+  }
 }
 
 .sidebar-profile {
@@ -1548,4 +1548,42 @@ body {
 .input-error:focus {
   border-color: var(--urgency-alta) !important;
   box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.25) !important;
+}
+
+/* Cartões Compactos do Kanban */
+.kanban-card.collapsed {
+  padding: 0.75rem 1rem !important;
+  gap: 0 !important;
+  min-height: auto !important;
+}
+.kanban-card.collapsed:hover {
+  border-color: var(--accent-gold);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+.kanban-card.collapsed .card-top {
+  margin-bottom: 0 !important;
+}
+.kanban-card.expanded {
+  animation: expandCard 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes expandCard {
+  from {
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Responsividade da Secção de Proposta */
+@media (max-width: 600px) {
+  .proposal-section {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+    padding: 0.85rem !important;
+  }
 }
