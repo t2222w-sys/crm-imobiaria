@@ -26,7 +26,9 @@ import {
   Heart,
   TrendingUp,
   Clock,
-  Smartphone
+  Smartphone,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL
@@ -245,6 +247,7 @@ function App() {
 
   // Navegação
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'definicoes'>('kanban');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Modais Gerais
   const [isImovelModalOpen, setIsImovelModalOpen] = useState(false);
@@ -373,6 +376,10 @@ function App() {
   const tiposImovelDisponiveis = [
     'Apartamento',
     'Moradia',
+    'Loja',
+    'Escritório',
+    'Armazém',
+    'Garagem',
     'Terreno Agrícola',
     'Terreno para Construção'
   ];
@@ -1559,7 +1566,7 @@ function App() {
     .reduce((acc, m) => acc + Number(m.preco_objetivo), 0);
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       {/* Toasts */}
       <div className="toast-container">
         {toasts.map(toast => (
@@ -1634,13 +1641,36 @@ function App() {
         
         {/* Topbar */}
         <header className="app-topbar">
-          <div className="topbar-title">
-            {activeMenu === 'dashboard' && 'Painel Geral'}
-            {activeMenu === 'kanban' && 'Gestão de Leads & Negócios'}
-            {activeMenu === 'imoveis' && 'Base de Dados de Imóveis'}
-            {activeMenu === 'compradores' && 'Base de Dados de Compradores'}
-            {activeMenu === 'calendario' && 'Calendário de Atividades'}
-            {activeMenu === 'definicoes' && 'Definições do Sistema'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <button 
+              onClick={() => setSidebarOpen(!sidebarOpen)} 
+              className="btn-sidebar-toggle desktop-only-view"
+              title={sidebarOpen ? "Esconder Menu" : "Mostrar Menu"}
+              style={{
+                background: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '6px',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-secondary)',
+                transition: 'background-color 0.2s, color 0.2s',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-color)',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+            </button>
+            <div className="topbar-title">
+              {activeMenu === 'dashboard' && 'Painel Geral'}
+              {activeMenu === 'kanban' && 'Gestão de Leads & Negócios'}
+              {activeMenu === 'imoveis' && 'Base de Dados de Imóveis'}
+              {activeMenu === 'compradores' && 'Base de Dados de Compradores'}
+              {activeMenu === 'calendario' && 'Calendário de Atividades'}
+              {activeMenu === 'definicoes' && 'Definições do Sistema'}
+            </div>
           </div>
 
           <div className="topbar-actions">

@@ -64,6 +64,11 @@ body {
   grid-template-columns: 260px 1fr;
   height: 100vh;
   overflow: hidden;
+  transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-container.sidebar-collapsed {
+  grid-template-columns: 0px 1fr;
 }
 
 /* Barra Lateral Esquerda */
@@ -74,11 +79,27 @@ body {
   flex-direction: column;
   padding: 2rem 1.25rem;
   overflow-y: auto;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.3s ease, 
+              padding 0.3s ease, 
+              width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 260px;
+  transform-origin: left center;
+  flex-shrink: 0;
+}
+
+.app-container.sidebar-collapsed .app-sidebar {
+  transform: translateX(-260px);
+  opacity: 0;
+  padding: 2rem 0;
+  width: 0px;
+  pointer-events: none;
+  border-right: 0 solid transparent;
 }
 
 @media (max-width: 900px) {
   .app-container {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
   .app-sidebar {
     display: none !important; /* Em mobile esconde por completo a barra lateral do desktop */
