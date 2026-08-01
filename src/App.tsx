@@ -32,6 +32,15 @@ import {
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL
+interface Agente {
+  id: string;
+  nome: string;
+  email: string;
+  senha?: string;
+  role: 'Admin' | 'Agente';
+  created_at: string;
+}
+
 interface Imovel {
   id: string;
   proprietario_nome: string;
@@ -57,6 +66,7 @@ interface Imovel {
   updated_at: string;
   estado_imovel: string;
   origem_contacto: string;
+  agente_id?: string; // Novo
 }
 
 interface Comprador {
@@ -79,6 +89,7 @@ interface Comprador {
   updated_at: string;
   estado_comprador: string;
   origem_contacto: string;
+  agente_id?: string; // Novo
 }
 
 interface Match {
@@ -86,9 +97,11 @@ interface Match {
   comprador_nome: string;
   comprador_urgencia: 'Alta' | 'Media' | 'Baixa';
   comprador_email?: string;
+  comprador_agente_id?: string; // Novo
   imovel_id: string;
   proprietario_nome: string;
   proprietario_email?: string;
+  imovel_agente_id?: string; // Novo
   tipologia: string;
   preco_objetivo: number;
   preco_minimo: number;
@@ -244,6 +257,28 @@ function App() {
       </div>
     );
   }
+
+  // Autenticação e Perfis
+  const [currentUser, setCurrentUser] = useState<Agente | null>(() => {
+    const saved = localStorage.getItem('crm_current_user');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginSenha, setLoginSenha] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [agentes, setAgentes] = useState<Agente[]>([]);
+  const [adminSelectedAgenteId, setAdminSelectedAgenteId] = useState<string>('Geral');
+
+  // Criar utilizador (Definições)
+  const [novoAgenteNome, setNovoAgenteNome] = useState('');
+  const [novoAgenteEmail, setNovoAgenteEmail] = useState('');
+  const [novoAgenteSenha, setNovoAgenteSenha] = useState('');
+  const [novoAgenteRole, setNovoAgenteRole] = useState<'Admin' | 'Agente'>('Agente');
 
   // Navegação
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'definicoes'>('kanban');
@@ -447,10 +482,82 @@ function App() {
     ? vendedores.find(v => v.id === selectedMatchDetail.imovel_id) 
     : null;
 
+  // Métodos de visibilidade baseados no agente logado
+  const getVisibleCompradores = () => {
+    if (!currentUser) return [];
+    let result = [...compradores];
+    if (currentUser.role === 'Agente') {
+      result = result.filter(c => c.agente_id === currentUser.id);
+    } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
+      result = result.filter(c => c.agente_id === adminSelectedAgenteId);
+    }
+    return result;
+  };
+
+  const getVisibleVendedores = () => {
+    if (!currentUser) return [];
+    let result = [...vendedores];
+    if (currentUser.role === 'Agente') {
+      result = result.filter(v => v.agente_id === currentUser.id);
+    } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
+      result = result.filter(v => v.agente_id === adminSelectedAgenteId);
+    }
+    return result;
+  };
+
+  const getVisibleMatches = () => {
+    if (!currentUser) return [];
+    let result = [...allMatches];
+    if (currentUser.role === 'Agente') {
+      result = result.filter(m => m.comprador_agente_id === currentUser.id);
+    } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
+      result = result.filter(m => m.comprador_agente_id === adminSelectedAgenteId);
+    }
+    return result;
+  };
+
+  const getVisibleAtividades = () => {
+    if (!currentUser) return [];
+    let result = [...atividades];
+    if (currentUser.role === 'Agente') {
+      result = result.filter(act => {
+        const comp = compradores.find(c => c.id === act.comprador_id);
+        const imov = vendedores.find(v => v.id === act.imovel_id);
+        const compOwns = comp ? comp.agente_id === currentUser.id : false;
+        const imovOwns = imov ? imov.agente_id === currentUser.id : false;
+        return compOwns || imovOwns || (!act.comprador_id && !act.imovel_id);
+      });
+    } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
+      result = result.filter(act => {
+        const comp = compradores.find(c => c.id === act.comprador_id);
+        const imov = vendedores.find(v => v.id === act.imovel_id);
+        const compOwns = comp ? comp.agente_id === adminSelectedAgenteId : false;
+        const imovOwns = imov ? imov.agente_id === adminSelectedAgenteId : false;
+        return compOwns || imovOwns;
+      });
+    }
+    return result;
+  };
+
   // Fetch
   const fetchData = async () => {
     setDbError(null);
     try {
+      // Carregar perfis de agentes sempre (necessário para validação de login e gestão de utilizadores)
+      const { data: aData, error: aErr } = await supabase
+        .from('perfis_agentes')
+        .select('*')
+        .order('nome', { ascending: true });
+
+      if (aErr) throw aErr;
+      setAgentes(aData || []);
+
+      // Se não houver utilizador autenticado, não carregamos dados confidenciais
+      const savedUser = localStorage.getItem('crm_current_user');
+      if (!savedUser && !currentUser) {
+        return;
+      }
+
       const { data: vData, error: vErr } = await supabase
         .from('vendedores_imoveis')
         .select('*')
@@ -491,7 +598,68 @@ function App() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentUser]);
+
+  // Handlers de Autenticação e Agentes
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    
+    const emailLower = loginEmail.trim().toLowerCase();
+    const user = agentes.find(a => a.email.toLowerCase() === emailLower && a.senha === loginSenha);
+    
+    if (user) {
+      localStorage.setItem('crm_current_user', JSON.stringify(user));
+      setCurrentUser(user);
+      showToast(`Bem-vindo, ${user.nome}!`, 'success');
+      setLoginEmail('');
+      setLoginSenha('');
+    } else {
+      setLoginError('E-mail ou password incorretos. Por favor, tente novamente.');
+    }
+    setIsLoggingIn(false);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('crm_current_user');
+    setCurrentUser(null);
+    setVendedores([]);
+    setCompradores([]);
+    setAllMatches([]);
+    setAtividades([]);
+    showToast('Sessão encerrada com sucesso.', 'success');
+  };
+
+  const handleCriarAgente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoAgenteNome || !novoAgenteEmail || !novoAgenteSenha) {
+      showToast('Preencha todos os campos do utilizador.', 'error');
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('perfis_agentes')
+        .insert([{
+          nome: novoAgenteNome.trim(),
+          email: novoAgenteEmail.trim().toLowerCase(),
+          senha: novoAgenteSenha,
+          role: novoAgenteRole
+        }])
+        .select();
+      
+      if (error) throw error;
+      
+      showToast('Utilizador criado com sucesso!', 'success');
+      setNovoAgenteNome('');
+      setNovoAgenteEmail('');
+      setNovoAgenteSenha('');
+      setNovoAgenteRole('Agente');
+      fetchData(); // recarregar agentes
+    } catch (err: any) {
+      showToast('Erro ao criar utilizador: ' + err.message, 'error');
+    }
+  };
 
   // Autocomplete
   const fetchConcelhos = async (pesquisa: string) => {
@@ -608,7 +776,10 @@ function App() {
       } else {
         const { error } = await supabase
           .from('vendedores_imoveis')
-          .insert([imovelPayload]);
+          .insert([{
+            ...imovelPayload,
+            agente_id: currentUser?.id
+          }]);
 
         if (error) throw error;
         showToast('Imóvel adicionado!');
@@ -697,7 +868,10 @@ function App() {
       } else {
         const { data: insertedData, error } = await supabase
           .from('compradores_leads')
-          .insert([leadPayload])
+          .insert([{
+            ...leadPayload,
+            agente_id: currentUser?.id
+          }])
           .select();
 
         if (error) throw error;
@@ -1269,7 +1443,7 @@ function App() {
 
   // --- FILTROS DE IMÓVEIS (PROPRIETÁRIOS) ---
   const getFilteredImoveis = () => {
-    let result = [...vendedores];
+    let result = getVisibleVendedores();
 
     if (fImovelPesquisa.trim()) {
       const q = fImovelPesquisa.toLowerCase();
@@ -1333,7 +1507,7 @@ function App() {
 
   // --- FILTROS DE COMPRADORES ---
   const getFilteredCompradores = () => {
-    let result = [...compradores];
+    let result = getVisibleCompradores();
 
     if (fCompradorPesquisa.trim()) {
       const q = fCompradorPesquisa.toLowerCase();
@@ -1398,7 +1572,7 @@ function App() {
   const getCalendarEvents = (): CalendarEvent[] => {
     const events: CalendarEvent[] = [];
 
-    vendedores.forEach(v => {
+    getVisibleVendedores().forEach(v => {
       const d = getLocalDateFromISO(v.created_at);
       events.push({
         date: d,
@@ -1424,7 +1598,7 @@ function App() {
       }
     });
 
-    compradores.forEach(c => {
+    getVisibleCompradores().forEach(c => {
       const d = getLocalDateFromISO(c.created_at);
       events.push({
         date: d,
@@ -1463,7 +1637,7 @@ function App() {
       }
     });
 
-    atividades.forEach(act => {
+    getVisibleAtividades().forEach(act => {
       const d = getLocalDateFromISO(act.data_hora);
       
       const comp = compradores.find(c => c.id === act.comprador_id);
@@ -1558,12 +1732,94 @@ function App() {
   ];
 
   const getColMatches = (estado: string) => {
-    return allMatches.filter(m => m.estado_match === estado);
+    return getVisibleMatches().filter(m => m.estado_match === estado);
   };
 
-  const totalVolumeNegocios = allMatches
+  const totalVolumeNegocios = getVisibleMatches()
     .filter(m => m.estado_match === 'Negócio Fechado')
     .reduce((acc, m) => acc + Number(m.preco_objetivo), 0);
+
+  if (!currentUser) {
+    return (
+      <div className="login-wrapper">
+        <div className="toast-container">
+          {toasts.map(toast => (
+            <div key={toast.id} className={`toast toast-${toast.type}`}>
+              {toast.type === 'success' ? <Check size={18} /> : <X size={18} />}
+              <span>{toast.message}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="login-card">
+          <div className="login-header">
+            <div className="login-logo-circle">I</div>
+            <h1 className="login-title">CRM Imobiliária</h1>
+            <p className="login-subtitle">Gestão Inteligente de Leads e Negócios</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="login-form">
+            {loginError && (
+              <div className="login-error-alert">
+                <AlertTriangle size={18} />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label htmlFor="login-email">Endereço de E-mail</label>
+              <input 
+                id="login-email"
+                type="email" 
+                className="input-text" 
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="exemplo@imo.com"
+                required
+              />
+            </div>
+
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label htmlFor="login-senha">Palavra-passe</label>
+              <input 
+                id="login-senha"
+                type="password" 
+                className="input-text" 
+                value={loginSenha}
+                onChange={(e) => setLoginSenha(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center', height: '44px' }}
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? 'A entrar...' : 'Entrar na Plataforma'}
+            </button>
+          </form>
+
+          <div className="login-dicas">
+            <span className="dicas-title">Credenciais de Acesso Disponíveis:</span>
+            <div className="dicas-grid">
+              <div className="dica-row">
+                <strong>Administrador:</strong> <span>admin@imo.com</span> (<code>admin123</code>)
+              </div>
+              <div className="dica-row">
+                <strong>João (Agente):</strong> <span>joao@imo.com</span> (<code>joao123</code>)
+              </div>
+              <div className="dica-row">
+                <strong>Tomás (Agente):</strong> <span>tomas@imo.com</span> (<code>tomas123</code>)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`app-container ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
@@ -1674,6 +1930,38 @@ function App() {
           </div>
 
           <div className="topbar-actions">
+            {currentUser?.role === 'Admin' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '8px' }} className="desktop-only-view">
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Filtrar Agente:</span>
+                <select 
+                  value={adminSelectedAgenteId} 
+                  onChange={(e) => setAdminSelectedAgenteId(e.target.value)}
+                  className="input-select"
+                  style={{ 
+                    fontSize: '0.8rem', 
+                    padding: '4px 10px', 
+                    height: '34px',
+                    width: '140px',
+                    margin: 0
+                  }}
+                >
+                  <option value="Geral">Ver Todos</option>
+                  {agentes.map(a => (
+                    <option key={a.id} value={a.id}>{a.nome} ({a.role})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button 
+              className="btn btn-secondary" 
+              onClick={handleLogout}
+              title="Terminar Sessão"
+              style={{ padding: '8px 12px', height: '34px', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '8px' }}
+            >
+              <span>Sair ({currentUser?.nome})</span>
+            </button>
+
             <button 
               className="btn btn-secondary" 
               onClick={() => {
@@ -1763,7 +2051,7 @@ function App() {
                     <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Clientes Ativos</span>
                     <Users size={20} style={{ color: 'var(--accent-blue)' }} />
                   </div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>{compradores.length}</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>{getVisibleCompradores().length}</div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Leads em prospeção</span>
                 </div>
 
@@ -1773,7 +2061,7 @@ function App() {
                     <Heart size={20} style={{ color: 'var(--urgency-baixa)' }} />
                   </div>
                   <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>
-                    {allMatches.filter(m => m.estado_match === 'Negócio Fechado').length}
+                    {getVisibleMatches().filter(m => m.estado_match === 'Negócio Fechado').length}
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No pipeline de vendas</span>
                 </div>
@@ -1808,7 +2096,7 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {allMatches.slice(0, 5).map((match, idx) => (
+                      {getVisibleMatches().slice(0, 5).map((match, idx) => (
                         <tr key={idx} onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
                           <td style={{ fontWeight: 700 }}>{match.comprador_nome}</td>
                           <td>{match.tipologia} em {match.freguesia}</td>
@@ -1828,7 +2116,7 @@ function App() {
                           </td>
                         </tr>
                       ))}
-                      {allMatches.length === 0 && (
+                      {getVisibleMatches().length === 0 && (
                         <tr>
                           <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                             Sem interações de matches de momento.
@@ -1842,7 +2130,7 @@ function App() {
                 {/* Visualização em Mobile (Cartões Compactos) */}
                 <div className="mobile-only-view">
                   <div className="mobile-cards-list" style={{ padding: '0' }}>
-                    {allMatches.slice(0, 5).map((match, idx) => (
+                    {getVisibleMatches().slice(0, 5).map((match, idx) => (
                       <div key={idx} className="mobile-item-card match-card" onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
                         <div className="mobile-card-row header">
                           <span className="mobile-card-name">{match.comprador_nome}</span>
@@ -1873,7 +2161,7 @@ function App() {
                         </div>
                       </div>
                     ))}
-                    {allMatches.length === 0 && (
+                    {getVisibleMatches().length === 0 && (
                       <div className="mobile-empty-state">
                         Sem interações de matches de momento.
                       </div>
@@ -1887,7 +2175,7 @@ function App() {
           {/* TAB 2: CRM KANBAN */}
           {activeMenu === 'kanban' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%' }}>
-              {allMatches.length === 0 && (
+              {getVisibleMatches().length === 0 && (
                 <div style={{
                   padding: '1.25rem',
                   backgroundColor: 'rgba(59, 130, 246, 0.07)',
@@ -2932,30 +3220,152 @@ function App() {
 
           {/* TAB 6: DEFINIÇÕES */}
           {activeMenu === 'definicoes' && (
-            <div className="kanban-card" style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem' }}>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1rem' }}>Sincronização da Base de Dados</h2>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '1rem', backgroundColor: 'var(--urgency-baixa-bg)', color: 'var(--urgency-baixa)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '1.5rem' }}>
-                <Check size={20} />
-                <span style={{ fontWeight: 600 }}>Ligado com Sucesso ao Supabase</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%', maxWidth: '800px', margin: '0 auto' }}>
+              <div className="kanban-card" style={{ padding: '2rem' }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Settings size={22} />
+                  <span>Sincronização da Base de Dados</span>
+                </h2>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '1rem', backgroundColor: 'var(--urgency-baixa-bg)', color: 'var(--urgency-baixa)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '1.5rem' }}>
+                  <Check size={20} />
+                  <span style={{ fontWeight: 600 }}>Ligado com Sucesso ao Supabase</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
+                  <div>
+                    <strong>URL da Base de Dados:</strong>
+                    <code style={{ display: 'block', backgroundColor: 'var(--bg-app)', padding: '6px 10px', borderRadius: '4px', marginTop: '4px', fontSize: '0.8rem' }}>
+                      https://akfykaystwyqzrsxdfjh.supabase.co
+                    </code>
+                  </div>
+                  <div>
+                    <strong>Estado de Segurança:</strong>
+                    <span style={{ color: 'var(--urgency-baixa)', fontWeight: 700, marginLeft: '8px' }}>Ativo (Acesso via Perfis)</span>
+                  </div>
+                  <div>
+                    <strong>Nome de Exibição do Projeto na Cloud:</strong>
+                    <span style={{ fontWeight: 600, marginLeft: '8px' }}>imo</span>
+                  </div>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
-                <div>
-                  <strong>URL da Base de Dados:</strong>
-                  <code style={{ display: 'block', backgroundColor: 'var(--bg-app)', padding: '6px 10px', borderRadius: '4px', marginTop: '4px', fontSize: '0.8rem' }}>
-                    https://akfykaystwyqzrsxdfjh.supabase.co
-                  </code>
+              {/* GESTÃO DE UTILIZADORES (APENAS PARA ADMIN) */}
+              {currentUser?.role === 'Admin' ? (
+                <div className="kanban-card" style={{ padding: '2rem' }}>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Users size={22} style={{ color: 'var(--accent-gold)' }} />
+                    <span>Gestão de Utilizadores (Agentes)</span>
+                  </h2>
+
+                  {/* Formulário para criar novo utilizador */}
+                  <form onSubmit={handleCriarAgente} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '2rem', padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nome Completo</label>
+                      <input 
+                        type="text" 
+                        className="input-text" 
+                        value={novoAgenteNome} 
+                        onChange={(e) => setNovoAgenteNome(e.target.value)} 
+                        placeholder="Nome do agente" 
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail</label>
+                      <input 
+                        type="email" 
+                        className="input-text" 
+                        value={novoAgenteEmail} 
+                        onChange={(e) => setNovoAgenteEmail(e.target.value)} 
+                        placeholder="email@imo.com" 
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Palavra-passe</label>
+                      <input 
+                        type="password" 
+                        className="input-text" 
+                        value={novoAgenteSenha} 
+                        onChange={(e) => setNovoAgenteSenha(e.target.value)} 
+                        placeholder="Senha" 
+                        required
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 2' : 'span 1', marginTop: '10px' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nível de Acesso (Role)</label>
+                      <select 
+                        className="input-select" 
+                        value={novoAgenteRole} 
+                        onChange={(e) => setNovoAgenteRole(e.target.value as 'Admin' | 'Agente')}
+                        style={{ margin: 0 }}
+                      >
+                        <option value="Agente">Agente Normal</option>
+                        <option value="Admin">Administrador</option>
+                      </select>
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary" 
+                      style={{ height: '40px', justifyContent: 'center', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 2' }}
+                    >
+                      <Plus size={16} /> Adicionar Novo Utilizador
+                    </button>
+                  </form>
+
+                  {/* Lista de Utilizadores Atuais */}
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem' }}>Lista de Utilizadores Ativos ({agentes.length})</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="app-table">
+                      <thead>
+                        <tr>
+                          <th>Nome</th>
+                          <th>E-mail</th>
+                          <th>Role</th>
+                          <th>Senha</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {agentes.map(a => (
+                          <tr key={a.id}>
+                            <td style={{ fontWeight: 700 }}>{a.nome}</td>
+                            <td>{a.email}</td>
+                            <td>
+                              <span className="badge" style={{
+                                backgroundColor: a.role === 'Admin' ? 'var(--urgency-alta-bg)' : 'var(--accent-blue-bg)',
+                                color: a.role === 'Admin' ? 'var(--urgency-alta)' : 'var(--accent-blue)',
+                                border: '1px solid transparent'
+                              }}>
+                                {a.role === 'Admin' ? '🛡️ Administrador' : '💼 Agente'}
+                              </span>
+                            </td>
+                            <td><code style={{ fontSize: '0.8rem' }}>{a.senha}</code></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
                 </div>
-                <div>
-                  <strong>Estado RLS:</strong>
-                  <span style={{ color: 'var(--urgency-baixa)', fontWeight: 700, marginLeft: '8px' }}>Ativo (Acesso Público Total)</span>
+              ) : (
+                <div className="kanban-card" style={{ padding: '2rem' }}>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Users size={22} style={{ color: 'var(--accent-blue)' }} />
+                    <span>O Meu Perfil</span>
+                  </h2>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.9rem' }}>
+                    <div><strong>Nome Completo:</strong> <span>{currentUser?.nome}</span></div>
+                    <div><strong>E-mail:</strong> <span>{currentUser?.email}</span></div>
+                    <div>
+                      <strong>Função:</strong> 
+                      <span className="badge" style={{ marginLeft: '6px', backgroundColor: 'var(--accent-blue-bg)', color: 'var(--accent-blue)', border: '1px solid transparent' }}>
+                        💼 Agente Normal
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <strong>Nome de Exibição do Projeto na Cloud:</strong>
-                  <span style={{ fontWeight: 600, marginLeft: '8px' }}>imo</span>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
