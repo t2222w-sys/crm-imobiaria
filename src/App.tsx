@@ -28,7 +28,8 @@ import {
   Clock,
   Smartphone,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  LogOut
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL
@@ -1954,11 +1955,12 @@ function App() {
             )}
 
             <button 
-              className="btn btn-secondary" 
+              className="btn btn-secondary logout-btn" 
               onClick={handleLogout}
               title="Terminar Sessão"
               style={{ padding: '8px 12px', height: '34px', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '8px' }}
             >
+              <LogOut size={16} />
               <span>Sair ({currentUser?.nome})</span>
             </button>
 

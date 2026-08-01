@@ -1182,8 +1182,13 @@ body {
   }
   
   .topbar-actions .btn {
-    padding: 0.6rem;
-    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 }
 
