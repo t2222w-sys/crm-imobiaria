@@ -40,6 +40,7 @@ interface Agente {
   senha?: string;
   role: 'Admin' | 'Agente';
   created_at: string;
+  parent_agente_id?: string | null; // Novo
 }
 
 interface Imovel {
@@ -148,6 +149,14 @@ interface Toast {
 }
 
 // --- UTILS DE FORMATAÇÃO E DATAS GLOBAIS (Nível de Ficheiro para escopo livre) ---
+const sanitizeInput = (text: string, maxLength: number): string => {
+  if (!text) return '';
+  let sanitized = text.slice(0, maxLength);
+  sanitized = sanitized.replace(/<[^>]*>/g, ''); // Remover HTML
+  sanitized = sanitized.replace(/\b(ignore all previous instructions|ignore guidelines|system bypass|sudo override|you must ignore|ignore instructions|ignore rules)\b/gi, '[REMOVED]');
+  return sanitized.trim();
+};
+
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
 };
@@ -307,6 +316,7 @@ function App() {
   const [imovelFormErrors, setImovelFormErrors] = useState<string[]>([]);
 
   const [selectedMatchDetail, setSelectedMatchDetail] = useState<Match | null>(null);
+  const [activeMatchesTarget, setActiveMatchesTarget] = useState<{ type: 'imovel' | 'comprador', id: string, name: string } | null>(null);
 
   // Estados de Edição
   const [editingImovelId, setEditingImovelId] = useState<string | null>(null);
@@ -483,12 +493,18 @@ function App() {
     ? vendedores.find(v => v.id === selectedMatchDetail.imovel_id) 
     : null;
 
+  const getAgentePrincipalId = (user: Agente | null): string => {
+    if (!user) return '';
+    return user.parent_agente_id || user.id;
+  };
+
   // Métodos de visibilidade baseados no agente logado
   const getVisibleCompradores = () => {
     if (!currentUser) return [];
     let result = [...compradores];
     if (currentUser.role === 'Agente') {
-      result = result.filter(c => c.agente_id === currentUser.id);
+      const principalId = getAgentePrincipalId(currentUser);
+      result = result.filter(c => c.agente_id === principalId);
     } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
       result = result.filter(c => c.agente_id === adminSelectedAgenteId);
     }
@@ -499,7 +515,8 @@ function App() {
     if (!currentUser) return [];
     let result = [...vendedores];
     if (currentUser.role === 'Agente') {
-      result = result.filter(v => v.agente_id === currentUser.id);
+      const principalId = getAgentePrincipalId(currentUser);
+      result = result.filter(v => v.agente_id === principalId);
     } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
       result = result.filter(v => v.agente_id === adminSelectedAgenteId);
     }
@@ -510,7 +527,8 @@ function App() {
     if (!currentUser) return [];
     let result = [...allMatches];
     if (currentUser.role === 'Agente') {
-      result = result.filter(m => m.comprador_agente_id === currentUser.id);
+      const principalId = getAgentePrincipalId(currentUser);
+      result = result.filter(m => m.comprador_agente_id === principalId);
     } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
       result = result.filter(m => m.comprador_agente_id === adminSelectedAgenteId);
     }
@@ -521,11 +539,12 @@ function App() {
     if (!currentUser) return [];
     let result = [...atividades];
     if (currentUser.role === 'Agente') {
+      const principalId = getAgentePrincipalId(currentUser);
       result = result.filter(act => {
         const comp = compradores.find(c => c.id === act.comprador_id);
         const imov = vendedores.find(v => v.id === act.imovel_id);
-        const compOwns = comp ? comp.agente_id === currentUser.id : false;
-        const imovOwns = imov ? imov.agente_id === currentUser.id : false;
+        const compOwns = comp ? comp.agente_id === principalId : false;
+        const imovOwns = imov ? imov.agente_id === principalId : false;
         return compOwns || imovOwns || (!act.comprador_id && !act.imovel_id);
       });
     } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
@@ -639,15 +658,17 @@ function App() {
       return;
     }
     try {
+      const payload = {
+        nome: sanitizeInput(novoAgenteNome, 100),
+        email: sanitizeInput(novoAgenteEmail, 100).toLowerCase(),
+        senha: sanitizeInput(novoAgenteSenha, 50),
+        role: currentUser?.role === 'Admin' ? novoAgenteRole : 'Agente',
+        parent_agente_id: currentUser?.role === 'Admin' ? null : currentUser?.id
+      };
+
       const { error } = await supabase
         .from('perfis_agentes')
-        .insert([{
-          nome: novoAgenteNome.trim(),
-          email: novoAgenteEmail.trim().toLowerCase(),
-          senha: novoAgenteSenha,
-          role: novoAgenteRole
-        }])
-        .select();
+        .insert([payload]);
       
       if (error) throw error;
       
@@ -740,27 +761,27 @@ function App() {
     }
 
     const imovelPayload = {
-      proprietario_nome: vNome,
-      proprietario_contacto: vContacto,
-      proprietario_email: vEmail || null,
+      proprietario_nome: sanitizeInput(vNome, 100),
+      proprietario_contacto: sanitizeInput(vContacto, 20),
+      proprietario_email: vEmail ? sanitizeInput(vEmail, 100) : null,
       tipologia: vTipologia,
       tipo_imovel: vTipoImovel,
       preco_objetivo: pObj,
       preco_minimo: pMin,
       flexibilidade_negociacao: vFlex,
       area_m2: parseFloat(vArea),
-      rua: vRua,
-      cidade: vCidade,
-      freguesia: vFreguesia,
-      andar: vAndar,
+      rua: sanitizeInput(vRua, 100),
+      cidade: sanitizeInput(vCidade, 100),
+      freguesia: sanitizeInput(vFreguesia, 100),
+      andar: sanitizeInput(vAndar, 50),
       tem_elevador: vElevador,
       tem_garagem: vGaragem,
       tem_quintal: vQuintal,
       tem_arrecadacao: vArrecadacao,
       urgencia: vUrgencia,
-      observacoes: vObs || null,
+      observacoes: vObs ? sanitizeInput(vObs, 500) : null,
       estado_imovel: vEstadoImovel,
-      origem_contacto: vOrigemContacto === 'Outro' ? (vOrigemContactoPersonalizada || 'Outro') : vOrigemContacto,
+      origem_contacto: sanitizeInput(vOrigemContacto === 'Outro' ? (vOrigemContactoPersonalizada || 'Outro') : vOrigemContacto, 50),
       updated_at: new Date().toISOString()
     };
 
@@ -779,7 +800,7 @@ function App() {
           .from('vendedores_imoveis')
           .insert([{
             ...imovelPayload,
-            agente_id: currentUser?.id
+            agente_id: getAgentePrincipalId(currentUser)
           }]);
 
         if (error) throw error;
@@ -836,9 +857,9 @@ function App() {
     setCompradorFormErrors([]);
 
     const leadPayload = {
-      comprador_nome: cNome,
-      comprador_contacto: cContacto,
-      comprador_email: cEmail || null,
+      comprador_nome: sanitizeInput(cNome, 100),
+      comprador_contacto: sanitizeInput(cContacto, 20),
+      comprador_email: cEmail ? sanitizeInput(cEmail, 100) : null,
       tipologias_pretendidas: cTipologias,
       tipos_imovel_pretendidos: cTiposImovel,
       orcamento_maximo: parseFloat(cOrcamento),
@@ -847,11 +868,11 @@ function App() {
       requisito_elevador_ou_rc: cElevadorRc,
       preferencia_espaco_exterior: cEspacoExt,
       urgencia: cUrgencia,
-      observacoes: cObs || null,
+      observacoes: cObs ? sanitizeInput(cObs, 500) : null,
       foi_contactado: cFoiContactado,
       data_contacto: cFoiContactado && cDataContacto ? new Date(cDataContacto).toISOString() : null,
       estado_comprador: cEstadoComprador,
-      origem_contacto: cOrigemContacto === 'Outro' ? (cOrigemContactoPersonalizada || 'Outro') : cOrigemContacto,
+      origem_contacto: sanitizeInput(cOrigemContacto === 'Outro' ? (cOrigemContactoPersonalizada || 'Outro') : cOrigemContacto, 50),
       updated_at: new Date().toISOString()
     };
 
@@ -871,7 +892,7 @@ function App() {
           .from('compradores_leads')
           .insert([{
             ...leadPayload,
-            agente_id: currentUser?.id
+            agente_id: getAgentePrincipalId(currentUser)
           }])
           .select();
 
@@ -956,7 +977,7 @@ function App() {
       data_hora: new Date(actDataHora).toISOString(),
       comprador_id: associarCliente && actCompradorId ? actCompradorId : null,
       imovel_id: associarImovel && actImovelId ? actImovelId : null,
-      notas: actNotas || null
+      notas: actNotas ? sanitizeInput(actNotas, 500) : null
     };
 
     try {
@@ -991,6 +1012,10 @@ function App() {
   };
 
   const handleDeleteAtividade = async (id: string) => {
+    if (currentUser?.parent_agente_id) {
+      showToast('Ação não permitida: Subcontas não podem eliminar registos.', 'error');
+      return;
+    }
     if (!window.confirm('Eliminar atividade da agenda?')) return;
     try {
       const { error } = await supabase.from('atividades_agenda').delete().eq('id', id);
@@ -1322,7 +1347,7 @@ function App() {
             comprador_id: compradorId,
             imovel_id: imovelId,
             estado: estado,
-            notas: notas,
+            notas: sanitizeInput(notas, 500),
             updated_at: new Date().toISOString()
           },
           { onConflict: 'comprador_id,imovel_id' }
@@ -1357,6 +1382,10 @@ function App() {
   };
 
   const handleDeleteImovel = async (id: string) => {
+    if (currentUser?.parent_agente_id) {
+      showToast('Ação não permitida: Subcontas não podem eliminar registos.', 'error');
+      return;
+    }
     if (!window.confirm('Eliminar este imóvel permanentemente?')) return;
     try {
       const { error } = await supabase.from('vendedores_imoveis').delete().eq('id', id);
@@ -1369,6 +1398,10 @@ function App() {
   };
 
   const handleDeleteComprador = async (id: string) => {
+    if (currentUser?.parent_agente_id) {
+      showToast('Ação não permitida: Subcontas não podem eliminar registos.', 'error');
+      return;
+    }
     if (!window.confirm('Eliminar esta lead de comprador permanentemente?')) return;
     try {
       const { error } = await supabase.from('compradores_leads').delete().eq('id', id);
@@ -2022,140 +2055,289 @@ function App() {
           {/* TAB 1: DASHBOARD */}
           {activeMenu === 'dashboard' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
+              
+              {/* KPIs Superiores (5 cards na linha) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.25rem' }}>
                 
-                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                <div className="kanban-card" style={{ padding: '1.25rem', margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Imóveis Registados</span>
-                    <Building size={20} style={{ color: 'var(--accent-gold)' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Imóveis Registados</span>
+                    <Building size={18} style={{ color: 'var(--accent-gold)' }} />
                   </div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>{vendedores.length}</div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Vendedores sob gestão</span>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '0.5rem' }}>{vendedores.length}</div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Captações sob gestão</span>
                 </div>
 
-                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                <div className="kanban-card" style={{ padding: '1.25rem', margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Clientes Ativos</span>
-                    <Users size={20} style={{ color: 'var(--accent-blue)' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Clientes Ativos</span>
+                    <Users size={18} style={{ color: 'var(--accent-blue)' }} />
                   </div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>{getVisibleCompradores().length}</div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Leads em prospeção</span>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '0.5rem' }}>{getVisibleCompradores().length}</div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Leads em prospeção</span>
                 </div>
 
-                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                <div className="kanban-card" style={{ padding: '1.25rem', margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Negócios Fechados</span>
-                    <Heart size={20} style={{ color: 'var(--urgency-baixa)' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Oportunidades de Match</span>
+                    <Sparkles size={18} style={{ color: 'var(--accent-gold)' }} />
                   </div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '0.5rem' }}>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '0.5rem', color: 'var(--accent-gold)' }}>
+                    {getVisibleMatches().filter(m => m.match_score >= 70).length}
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Matches qualificados &gt;= 70%</span>
+                </div>
+
+                <div className="kanban-card" style={{ padding: '1.25rem', margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Negócios Fechados</span>
+                    <Heart size={18} style={{ color: 'var(--urgency-baixa)' }} />
+                  </div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '0.5rem' }}>
                     {getVisibleMatches().filter(m => m.estado_match === 'Negócio Fechado').length}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No pipeline de vendas</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Funil de vendas concluído</span>
                 </div>
 
-                <div className="kanban-card" style={{ padding: '1.5rem' }}>
+                <div className="kanban-card" style={{ padding: '1.25rem', margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Volume de Vendas</span>
-                    <TrendingUp size={20} style={{ color: 'var(--accent-purple)' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Volume Faturado</span>
+                    <TrendingUp size={18} style={{ color: 'var(--accent-purple)' }} />
                   </div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '0.85rem', color: 'var(--urgency-baixa)' }}>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 700, marginTop: '0.7rem', color: 'var(--urgency-baixa)' }}>
                     {formatCurrency(totalVolumeNegocios)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Faturação sob mediação</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Volume sob mediação</span>
                 </div>
 
               </div>
 
-              <div className="data-table-card" style={{ marginTop: 0 }}>
-                <div className="table-header-bar">
-                  <h3 className="table-header-title">Últimos Matches Qualificados</h3>
-                </div>
-                {/* Visualização em Desktop (Tabela) */}
-                <div className="desktop-only-view" style={{ overflowX: 'auto' }}>
-                  <table className="app-table">
-                    <thead>
-                      <tr>
-                        <th>Comprador</th>
-                        <th>Imóvel Compatível</th>
-                        <th>Preço Anunciado</th>
-                        <th>Score</th>
-                        <th>Estado CRM</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {getVisibleMatches().slice(0, 5).map((match, idx) => (
-                        <tr key={idx} onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
-                          <td style={{ fontWeight: 700 }}>{match.comprador_nome}</td>
-                          <td>{match.tipologia} em {match.freguesia}</td>
-                          <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(match.preco_objetivo)}</td>
-                          <td style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>{match.match_score}%</td>
-                          <td>
-                            <span 
-                              className="badge"
-                              style={{
-                                border: '1px solid',
-                                backgroundColor: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
-                                color: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
-                              }}
-                            >
-                              {match.estado_match}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                      {getVisibleMatches().length === 0 && (
-                        <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+              {/* Layout Duas Colunas: Tabela + Compatíveis (65%) | Agenda Hoje (35%) */}
+              <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 1024 ? '1fr' : '65% 35%', gap: '1.5rem', alignItems: 'start' }}>
+                
+                {/* COLUNA ESQUERDA: LISTAGEM DE MATCHES E IMÓVEIS COMPATÍVEIS */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  
+                  {/* Tabela de Matches Recentes */}
+                  <div className="data-table-card" style={{ marginTop: 0 }}>
+                    <div className="table-header-bar">
+                      <h3 className="table-header-title">Últimos Matches Qualificados</h3>
+                    </div>
+                    
+                    {/* Desktop View */}
+                    <div className="desktop-only-view" style={{ overflowX: 'auto' }}>
+                      <table className="app-table">
+                        <thead>
+                          <tr>
+                            <th>Comprador</th>
+                            <th>Imóvel Compatível</th>
+                            <th>Preço Anunciado</th>
+                            <th>Score</th>
+                            <th>Estado CRM</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getVisibleMatches().slice(0, 5).map((match, idx) => (
+                            <tr key={idx} onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
+                              <td style={{ fontWeight: 700 }}>{match.comprador_nome}</td>
+                              <td>{match.tipologia} em {match.freguesia}</td>
+                              <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(match.preco_objetivo)}</td>
+                              <td style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>{match.match_score}%</td>
+                              <td>
+                                <span 
+                                  className="badge"
+                                  style={{
+                                    border: '1px solid',
+                                    backgroundColor: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
+                                    color: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
+                                  }}
+                                >
+                                  {match.estado_match}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                          {getVisibleMatches().length === 0 && (
+                            <tr>
+                              <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                                Sem interações de matches de momento.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile View */}
+                    <div className="mobile-only-view">
+                      <div className="mobile-cards-list" style={{ padding: '0' }}>
+                        {getVisibleMatches().slice(0, 5).map((match, idx) => (
+                          <div key={idx} className="mobile-item-card match-card" onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
+                            <div className="mobile-card-row header">
+                              <span className="mobile-card-name">{match.comprador_nome}</span>
+                              <span 
+                                className="badge"
+                                style={{
+                                  border: '1px solid',
+                                  backgroundColor: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
+                                  color: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
+                                }}
+                              >
+                                {match.estado_match}
+                              </span>
+                            </div>
+                            <div className="mobile-card-body">
+                              <div className="mobile-card-detail">
+                                <span className="detail-label">Imóvel:</span>
+                                <span className="detail-value">{match.tipologia} em {match.freguesia}</span>
+                              </div>
+                              <div className="mobile-card-detail">
+                                <span className="detail-label">Preço Anunciado:</span>
+                                <span className="detail-value price">{formatCurrency(match.preco_objetivo)}</span>
+                              </div>
+                              <div className="mobile-card-detail">
+                                <span className="detail-label">Compatibilidade:</span>
+                                <span className="detail-value score-blue">{match.match_score}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {getVisibleMatches().length === 0 && (
+                          <div className="mobile-empty-state">
                             Sem interações de matches de momento.
-                          </td>
-                        </tr>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Quadro de Imóveis com Oportunidades de Venda Cruzadas */}
+                  <div className="data-table-card" style={{ marginTop: 0 }}>
+                    <div className="table-header-bar">
+                      <h3 className="table-header-title">Imóveis com Oportunidades de Venda (Matches Ativos)</h3>
+                    </div>
+                    <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {getVisibleVendedores()
+                        .map(imov => {
+                          const matches = getVisibleMatches().filter(m => m.imovel_id === imov.id && m.match_score >= 70);
+                          return { imov, matchesCount: matches.length, bestScore: matches.length > 0 ? Math.max(...matches.map(m => m.match_score)) : 0 };
+                        })
+                        .filter(item => item.matchesCount > 0)
+                        .sort((a, b) => b.bestScore - a.bestScore)
+                        .slice(0, 4)
+                        .map((item, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => setActiveMatchesTarget({ type: 'imovel', id: item.imov.id, name: `${item.imov.tipo_imovel} (${item.imov.tipologia}) - ${item.imov.proprietario_nome}` })}
+                            style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center', 
+                              padding: '12px 14px', 
+                              backgroundColor: 'var(--bg-app)', 
+                              border: '1px solid var(--border-color)', 
+                              borderRadius: 'var(--radius-md)',
+                              cursor: 'pointer',
+                              margin: 0
+                            }}
+                            title="Ver Oportunidades deste Imóvel"
+                            className="kanban-card collapsed"
+                          >
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{item.imov.tipo_imovel} ({item.imov.tipologia}) em {item.imov.freguesia}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                Proprietário: {item.imov.proprietario_nome} | Preço: {formatCurrency(item.imov.preco_objetivo)}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <span className="badge" style={{ backgroundColor: 'var(--urgency-baixa-bg)', color: 'var(--urgency-baixa)', border: 'none', fontSize: '0.7rem', fontWeight: 700 }}>
+                                🔥 {item.matchesCount} clientes
+                              </span>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-blue)' }}>Score Máx: {item.bestScore}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      {getVisibleVendedores().filter(v => getVisibleMatches().some(m => m.imovel_id === v.id && m.match_score >= 70)).length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                          Sem imóveis com correspondências qualificadas no momento.
+                        </div>
                       )}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
                 </div>
 
-                {/* Visualização em Mobile (Cartões Compactos) */}
-                <div className="mobile-only-view">
-                  <div className="mobile-cards-list" style={{ padding: '0' }}>
-                    {getVisibleMatches().slice(0, 5).map((match, idx) => (
-                      <div key={idx} className="mobile-item-card match-card" onClick={() => setSelectedMatchDetail(match)} style={{ cursor: 'pointer' }} title="Clique para ver detalhes do match">
-                        <div className="mobile-card-row header">
-                          <span className="mobile-card-name">{match.comprador_nome}</span>
-                          <span 
-                            className="badge"
-                            style={{
-                              border: '1px solid',
-                              backgroundColor: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
-                              color: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
+                {/* COLUNA DIREITA: AGENDA DO DIA DE HOJE */}
+                <div className="data-table-card" style={{ marginTop: 0, padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                    <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-display)' }}>
+                      <Calendar size={18} style={{ color: 'var(--accent-blue)' }} />
+                      <span>Agenda de Hoje</span>
+                    </h3>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-gold)', backgroundColor: 'rgba(180,83,9,0.06)', padding: '2px 8px', borderRadius: '4px' }}>
+                      {new Date().toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' })}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {(() => {
+                      const hojeStr = getLocalDateString(new Date());
+                      const eventosHoje = getVisibleAtividades().filter(act => getLocalDateFromISO(act.data_hora) === hojeStr);
+                      
+                      if (eventosHoje.length === 0) {
+                        return (
+                          <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>
+                            <Clock size={24} style={{ color: 'var(--text-muted)', marginBottom: '8px', opacity: 0.6, margin: '0 auto 8px auto', display: 'block' }} />
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>Sem compromissos hoje</div>
+                            <div style={{ fontSize: '0.7rem' }}>Excelente oportunidade para prospeções!</div>
+                          </div>
+                        );
+                      }
+
+                      return eventosHoje.map((act, idx) => {
+                        const comp = compradores.find(c => c.id === act.comprador_id);
+                        const timeStr = act.data_hora ? new Date(act.data_hora).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : 'Hora N/A';
+                        return (
+                          <div 
+                            key={idx}
+                            style={{ 
+                              padding: '10px 12px', 
+                              borderLeft: '4px solid var(--accent-blue)', 
+                              backgroundColor: 'var(--bg-app)', 
+                              borderRadius: '4px',
+                              fontSize: '0.8rem'
                             }}
                           >
-                            {match.estado_match}
-                          </span>
-                        </div>
-                        <div className="mobile-card-body">
-                          <div className="mobile-card-detail">
-                            <span className="detail-label">Imóvel:</span>
-                            <span className="detail-value">{match.tipologia} em {match.freguesia}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                              <span>{act.tipos_atividade.join(' + ')}</span>
+                              <span style={{ color: 'var(--accent-blue)' }}>{timeStr}</span>
+                            </div>
+                            <div style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '0.75rem' }}>
+                              {comp ? `Cliente: ${comp.comprador_nome}` : 'Sem cliente associado'}
+                            </div>
+                            {act.notas && (
+                              <div style={{ marginTop: '4px', fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                                "{act.notas}"
+                              </div>
+                            )}
                           </div>
-                          <div className="mobile-card-detail">
-                            <span className="detail-label">Preço Anunciado:</span>
-                            <span className="detail-value price">{formatCurrency(match.preco_objetivo)}</span>
-                          </div>
-                          <div className="mobile-card-detail">
-                            <span className="detail-label">Compatibilidade:</span>
-                            <span className="detail-value score-blue">{match.match_score}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {getVisibleMatches().length === 0 && (
-                      <div className="mobile-empty-state">
-                        Sem interações de matches de momento.
-                      </div>
-                    )}
+                        );
+                      });
+                    })()}
                   </div>
+
+                  <button 
+                    onClick={() => setActiveMenu('calendario')}
+                    className="btn btn-secondary" 
+                    style={{ width: '100%', marginTop: '1.25rem', fontSize: '0.75rem', justifyContent: 'center', height: '34px' }}
+                  >
+                    Ver Calendário Completo
+                  </button>
                 </div>
+
               </div>
+
             </div>
           )}
 
@@ -2517,7 +2699,24 @@ function App() {
                           </td>
                           <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{imovel.origem_contacto || 'Outro'}</td>
                           <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              {(() => {
+                                const imovelMatches = getVisibleMatches().filter(m => m.imovel_id === imovel.id && m.match_score >= 70);
+                                if (imovelMatches.length > 0) {
+                                  return (
+                                    <button 
+                                      onClick={() => setActiveMatchesTarget({ type: 'imovel', id: imovel.id, name: `${imovel.tipo_imovel} (${imovel.tipologia}) - ${imovel.proprietario_nome}` })}
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 8px', color: 'var(--accent-gold)', borderColor: 'rgba(180, 83, 9, 0.2)', backgroundColor: 'rgba(180, 83, 9, 0.05)' }}
+                                      title={`${imovelMatches.length} Oportunidades Cruzadas`}
+                                    >
+                                      <Sparkles size={14} />
+                                      <span style={{ marginLeft: '4px', fontSize: '0.75rem', fontWeight: 700 }}>{imovelMatches.length}</span>
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
                               <button 
                                 onClick={() => startEditImovel(imovel)}
                                 className="btn btn-secondary" 
@@ -2526,14 +2725,16 @@ function App() {
                               >
                                 <Edit2 size={14} />
                               </button>
-                              <button 
-                                onClick={() => handleDeleteImovel(imovel.id)}
-                                className="btn btn-secondary" 
-                                style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
-                                title="Eliminar"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              {!currentUser?.parent_agente_id && (
+                                <button 
+                                  onClick={() => handleDeleteImovel(imovel.id)}
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
+                                  title="Eliminar"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2619,14 +2820,32 @@ function App() {
                         </div>
 
                         <div className="mobile-card-actions">
+                          {(() => {
+                            const imovelMatches = getVisibleMatches().filter(m => m.imovel_id === imovel.id && m.match_score >= 70);
+                            if (imovelMatches.length > 0) {
+                              return (
+                                <button 
+                                  onClick={() => setActiveMatchesTarget({ type: 'imovel', id: imovel.id, name: `${imovel.tipo_imovel} (${imovel.tipologia}) - ${imovel.proprietario_nome}` })}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ color: 'var(--accent-gold)', borderColor: 'rgba(180, 83, 9, 0.2)', backgroundColor: 'rgba(180, 83, 9, 0.05)' }}
+                                >
+                                  <Sparkles size={12} />
+                                  <span>{imovelMatches.length} Matches</span>
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
                           <button onClick={() => startEditImovel(imovel)} className="btn btn-secondary btn-sm">
                             <Edit2 size={12} />
                             <span>Editar</span>
                           </button>
-                          <button onClick={() => handleDeleteImovel(imovel.id)} className="btn btn-secondary btn-sm delete-btn">
-                            <Trash2 size={12} />
-                            <span>Eliminar</span>
-                          </button>
+                          {!currentUser?.parent_agente_id && (
+                            <button onClick={() => handleDeleteImovel(imovel.id)} className="btn btn-secondary btn-sm delete-btn">
+                              <Trash2 size={12} />
+                              <span>Eliminar</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2889,7 +3108,24 @@ function App() {
                             )}
                           </td>
                           <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              {(() => {
+                                const compradorMatches = getVisibleMatches().filter(m => m.comprador_id === comp.id && m.match_score >= 70);
+                                if (compradorMatches.length > 0) {
+                                  return (
+                                    <button 
+                                      onClick={() => setActiveMatchesTarget({ type: 'comprador', id: comp.id, name: comp.comprador_nome })}
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 8px', color: 'var(--accent-blue)', borderColor: 'rgba(59, 130, 246, 0.2)', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}
+                                      title={`${compradorMatches.length} Oportunidades Cruzadas`}
+                                    >
+                                      <Sparkles size={14} />
+                                      <span style={{ marginLeft: '4px', fontSize: '0.75rem', fontWeight: 700 }}>{compradorMatches.length}</span>
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
                               <button 
                                 onClick={() => startEditComprador(comp)}
                                 className="btn btn-secondary" 
@@ -2898,14 +3134,16 @@ function App() {
                               >
                                 <Edit2 size={14} />
                               </button>
-                              <button 
-                                onClick={() => handleDeleteComprador(comp.id)}
-                                className="btn btn-secondary" 
-                                style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
-                                title="Eliminar"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              {!currentUser?.parent_agente_id && (
+                                <button 
+                                  onClick={() => handleDeleteComprador(comp.id)}
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
+                                  title="Eliminar"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -3006,14 +3244,32 @@ function App() {
                         </div>
 
                         <div className="mobile-card-actions">
+                          {(() => {
+                            const compradorMatches = getVisibleMatches().filter(m => m.comprador_id === comp.id && m.match_score >= 70);
+                            if (compradorMatches.length > 0) {
+                              return (
+                                <button 
+                                  onClick={() => setActiveMatchesTarget({ type: 'comprador', id: comp.id, name: comp.comprador_nome })}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ color: 'var(--accent-blue)', borderColor: 'rgba(59, 130, 246, 0.2)', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}
+                                >
+                                  <Sparkles size={12} />
+                                  <span>{compradorMatches.length} Matches</span>
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
                           <button onClick={() => startEditComprador(comp)} className="btn btn-secondary btn-sm">
                             <Edit2 size={12} />
                             <span>Editar</span>
                           </button>
-                          <button onClick={() => handleDeleteComprador(comp.id)} className="btn btn-secondary btn-sm delete-btn">
-                            <Trash2 size={12} />
-                            <span>Eliminar</span>
-                          </button>
+                          {!currentUser?.parent_agente_id && (
+                            <button onClick={() => handleDeleteComprador(comp.id)} className="btn btn-secondary btn-sm delete-btn">
+                              <Trash2 size={12} />
+                              <span>Eliminar</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -3172,7 +3428,7 @@ function App() {
                           )}
 
                           {/* Eliminar Atividade */}
-                          {evt.type === 'agenda' && (
+                          {evt.type === 'agenda' && !currentUser?.parent_agente_id && (
                             <button 
                               onClick={() => handleDeleteAtividade(evt.originalId)}
                               style={{ 
@@ -3225,6 +3481,7 @@ function App() {
                         type="text" 
                         className="input-text" 
                         value={novoAgenteNome} 
+                        maxLength={100}
                         onChange={(e) => setNovoAgenteNome(e.target.value)} 
                         placeholder="Nome do agente" 
                         required
@@ -3236,6 +3493,7 @@ function App() {
                         type="email" 
                         className="input-text" 
                         value={novoAgenteEmail} 
+                        maxLength={100}
                         onChange={(e) => setNovoAgenteEmail(e.target.value)} 
                         placeholder="email@imo.com" 
                         required
@@ -3247,6 +3505,7 @@ function App() {
                         type="password" 
                         className="input-text" 
                         value={novoAgenteSenha} 
+                        maxLength={50}
                         onChange={(e) => setNovoAgenteSenha(e.target.value)} 
                         placeholder="Senha" 
                         required
@@ -3286,43 +3545,149 @@ function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {agentes.map(a => (
-                          <tr key={a.id}>
-                            <td style={{ fontWeight: 700 }}>{a.nome}</td>
-                            <td>{a.email}</td>
-                            <td>
-                              <span className="badge" style={{
-                                backgroundColor: a.role === 'Admin' ? 'var(--urgency-alta-bg)' : 'var(--accent-blue-bg)',
-                                color: a.role === 'Admin' ? 'var(--urgency-alta)' : 'var(--accent-blue)',
-                                border: '1px solid transparent'
-                              }}>
-                                {a.role === 'Admin' ? '🛡️ Administrador' : '💼 Agente'}
-                              </span>
-                            </td>
-                            <td><code style={{ fontSize: '0.8rem' }}>{a.senha}</code></td>
-                          </tr>
-                        ))}
+                        {agentes.map(a => {
+                          const pai = a.parent_agente_id ? agentes.find(p => p.id === a.parent_agente_id) : null;
+                          return (
+                            <tr key={a.id}>
+                              <td style={{ fontWeight: 700 }}>
+                                {a.nome}
+                                {pai && <div style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>Subconta de: {pai.nome}</div>}
+                              </td>
+                              <td>{a.email}</td>
+                              <td>
+                                <span className="badge" style={{
+                                  backgroundColor: a.role === 'Admin' ? 'var(--urgency-alta-bg)' : 'var(--accent-blue-bg)',
+                                  color: a.role === 'Admin' ? 'var(--urgency-alta)' : 'var(--accent-blue)',
+                                  border: '1px solid transparent'
+                                }}>
+                                  {a.role === 'Admin' ? '🛡️ Administrador' : (a.parent_agente_id ? '👥 Sub-agente' : '💼 Agente Principal')}
+                                </span>
+                              </td>
+                              <td><code style={{ fontSize: '0.8rem' }}>{a.senha}</code></td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
                 </div>
               ) : (
-                <div className="kanban-card" style={{ padding: '2rem' }}>
-                  <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Users size={22} style={{ color: 'var(--accent-blue)' }} />
-                    <span>O Meu Perfil</span>
-                  </h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.9rem' }}>
-                    <div><strong>Nome Completo:</strong> <span>{currentUser?.nome}</span></div>
-                    <div><strong>E-mail:</strong> <span>{currentUser?.email}</span></div>
-                    <div>
-                      <strong>Função:</strong> 
-                      <span className="badge" style={{ marginLeft: '6px', backgroundColor: 'var(--accent-blue-bg)', color: 'var(--accent-blue)', border: '1px solid transparent' }}>
-                        💼 Agente Normal
-                      </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  {/* Perfil */}
+                  <div className="kanban-card" style={{ padding: '2rem' }}>
+                    <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Users size={22} style={{ color: 'var(--accent-blue)' }} />
+                      <span>O Meu Perfil</span>
+                    </h2>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.9rem' }}>
+                      <div><strong>Nome Completo:</strong> <span>{currentUser?.nome}</span></div>
+                      <div><strong>E-mail:</strong> <span>{currentUser?.email}</span></div>
+                      <div>
+                        <strong>Função:</strong> 
+                        <span className="badge" style={{ marginLeft: '6px', backgroundColor: 'var(--accent-blue-bg)', color: 'var(--accent-blue)', border: '1px solid transparent' }}>
+                          {currentUser?.parent_agente_id ? '👥 Sub-agente' : '💼 Agente Principal'}
+                        </span>
+                      </div>
                     </div>
                   </div>
+
+                  {/* GESTÃO DE SUBCONTAS (APENAS PARA AGENTES PRINCIPAIS) */}
+                  {!currentUser?.parent_agente_id && (
+                    <div className="kanban-card" style={{ padding: '2rem' }}>
+                      <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Users size={22} style={{ color: 'var(--accent-gold)' }} />
+                        <span>Gestão de Subcontas (A Minha Equipa)</span>
+                      </h2>
+
+                      {/* Formulário para criar nova subconta */}
+                      <form onSubmit={handleCriarAgente} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '2rem', padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nome do Sub-agente</label>
+                          <input 
+                            type="text" 
+                            className="input-text" 
+                            value={novoAgenteNome} 
+                            maxLength={100}
+                            onChange={(e) => setNovoAgenteNome(e.target.value)} 
+                            placeholder="Ex: João Júnior" 
+                            required
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail da Subconta</label>
+                          <input 
+                            type="email" 
+                            className="input-text" 
+                            value={novoAgenteEmail} 
+                            maxLength={100}
+                            onChange={(e) => setNovoAgenteEmail(e.target.value)} 
+                            placeholder="email@imo.com" 
+                            required
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Palavra-passe</label>
+                          <input 
+                            type="password" 
+                            className="input-text" 
+                            value={novoAgenteSenha} 
+                            maxLength={50}
+                            onChange={(e) => setNovoAgenteSenha(e.target.value)} 
+                            placeholder="Senha" 
+                            required
+                          />
+                        </div>
+                        <button 
+                          type="submit" 
+                          className="btn btn-primary" 
+                          style={{ height: '40px', justifyContent: 'center', gridColumn: 'span 3', marginTop: '10px' }}
+                        >
+                          <Plus size={16} /> Criar Subconta
+                        </button>
+                      </form>
+
+                      {/* Lista de Subcontas do Agente Ativo */}
+                      <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem' }}>Subcontas Ativas ({agentes.filter(a => a.parent_agente_id === currentUser?.id).length})</h3>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="app-table">
+                          <thead>
+                            <tr>
+                              <th>Nome</th>
+                              <th>E-mail</th>
+                              <th>Função</th>
+                              <th>Senha de Acesso</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {agentes.filter(a => a.parent_agente_id === currentUser?.id).map(a => (
+                              <tr key={a.id}>
+                                <td style={{ fontWeight: 700 }}>{a.nome}</td>
+                                <td>{a.email}</td>
+                                <td>
+                                  <span className="badge" style={{
+                                    backgroundColor: 'var(--accent-blue-bg)',
+                                    color: 'var(--accent-blue)',
+                                    border: '1px solid transparent'
+                                  }}>
+                                    💼 Sub-agente
+                                  </span>
+                                </td>
+                                <td><code style={{ fontSize: '0.8rem' }}>{a.senha}</code></td>
+                              </tr>
+                            ))}
+                            {agentes.filter(a => a.parent_agente_id === currentUser?.id).length === 0 && (
+                              <tr>
+                                <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
+                                  Não tens nenhuma subconta associada. Introduz os dados acima para criares a tua equipa!
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3382,6 +3747,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vNome}
+                  maxLength={100}
                   onChange={(e) => {
                     setVNome(e.target.value);
                     if (imovelFormErrors.includes('nome')) {
@@ -3399,6 +3765,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vContacto}
+                  maxLength={20}
                   onChange={(e) => {
                     setVContacto(e.target.value);
                     if (imovelFormErrors.includes('contacto')) {
@@ -3416,6 +3783,7 @@ function App() {
                 <input 
                   type="email" 
                   value={vEmail}
+                  maxLength={100}
                   onChange={(e) => setVEmail(e.target.value)}
                   placeholder="Ex: manuel@email.com"
                 />
@@ -3498,6 +3866,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vAndar}
+                  maxLength={50}
                   onChange={(e) => {
                     setVAndar(e.target.value);
                     if (imovelFormErrors.includes('andar')) {
@@ -3534,6 +3903,7 @@ function App() {
                   <input 
                     type="text"
                     value={vOrigemContactoPersonalizada}
+                    maxLength={50}
                     onChange={(e) => setVOrigemContactoPersonalizada(e.target.value)}
                     placeholder="Ex: Nome da pessoa ou recomendação..."
                     required
@@ -3556,6 +3926,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vRua}
+                  maxLength={100}
                   onChange={(e) => {
                     setVRua(e.target.value);
                     if (imovelFormErrors.includes('rua')) {
@@ -3573,6 +3944,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vCidade}
+                  maxLength={100}
                   list="v-cidades-list"
                   onChange={(e) => {
                     setVCidade(e.target.value);
@@ -3595,6 +3967,7 @@ function App() {
                 <input 
                   type="text" 
                   value={vFreguesia}
+                  maxLength={100}
                   list="v-freguesias-list"
                   onChange={(e) => {
                     setVFreguesia(e.target.value);
@@ -3648,6 +4021,7 @@ function App() {
                 <textarea 
                   rows={2} 
                   value={vObs}
+                  maxLength={500}
                   onChange={(e) => setVObs(e.target.value)}
                   placeholder="Notas adicionais sobre o negócio..."
                 />
@@ -3680,6 +4054,7 @@ function App() {
                 <input 
                   type="text" 
                   value={cNome}
+                  maxLength={100}
                   onChange={(e) => {
                     setCNome(e.target.value);
                     if (compradorFormErrors.includes('nome')) {
@@ -3697,6 +4072,7 @@ function App() {
                 <input 
                   type="text" 
                   value={cContacto}
+                  maxLength={20}
                   onChange={(e) => {
                     setCContacto(e.target.value);
                     if (compradorFormErrors.includes('contacto')) {
@@ -3714,6 +4090,7 @@ function App() {
                 <input 
                   type="email" 
                   value={cEmail}
+                  maxLength={100}
                   onChange={(e) => setCEmail(e.target.value)}
                   placeholder="Ex: carolina@email.com"
                 />
@@ -3751,6 +4128,7 @@ function App() {
                   <input 
                     type="text"
                     value={cOrigemContactoPersonalizada}
+                    maxLength={50}
                     onChange={(e) => setCOrigemContactoPersonalizada(e.target.value)}
                     placeholder="Ex: Nome da pessoa ou recomendação..."
                     required
@@ -3927,6 +4305,7 @@ function App() {
                 <textarea 
                   rows={2} 
                   value={cObs}
+                  maxLength={500}
                   onChange={(e) => setCObs(e.target.value)}
                   placeholder="Notas adicionais sobre o perfil..."
                 />
@@ -4130,6 +4509,7 @@ function App() {
                 <textarea 
                   rows={2} 
                   value={actNotas}
+                  maxLength={500}
                   onChange={(e) => setActNotas(e.target.value)}
                   placeholder="Escreve detalhes da reunião, CPCV, etc..."
                 />
@@ -4617,6 +4997,86 @@ function App() {
                 <button className="btn btn-secondary" onClick={() => setSelectedMatchDetail(null)}>Fechar</button>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeMatchesTarget && (
+        <div className="modal-overlay">
+          <div className="modal-content-card" style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+                <Sparkles size={20} style={{ color: 'var(--accent-gold)' }} />
+                <span>Oportunidades Cruzadas</span>
+              </h3>
+              <button className="modal-close-btn" onClick={() => setActiveMatchesTarget(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '1.5rem' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Abaixo estão listadas todas as correspondências compatíveis encontradas pelo sistema para: <strong>{activeMatchesTarget.name}</strong>
+              </p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
+                {getVisibleMatches()
+                  .filter(m => activeMatchesTarget.type === 'imovel' ? m.imovel_id === activeMatchesTarget.id : m.comprador_id === activeMatchesTarget.id)
+                  .map((match, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => {
+                        setSelectedMatchDetail(match);
+                        setActiveMatchesTarget(null);
+                      }}
+                      className="kanban-card collapsed"
+                      style={{ 
+                        padding: '12px 16px', 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        cursor: 'pointer',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor: 'var(--bg-card)',
+                        margin: 0
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                          {activeMatchesTarget.type === 'imovel' ? match.comprador_nome : `${match.tipologia} em ${match.freguesia}`}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                          Preço: {formatCurrency(match.preco_objetivo)} | Urgência: {activeMatchesTarget.type === 'imovel' ? match.comprador_urgencia : match.imovel_urgencia}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span 
+                          className="badge"
+                          style={{
+                            fontSize: '0.7rem',
+                            backgroundColor: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa-bg)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media-bg)' : 'var(--accent-blue-bg)',
+                            color: match.estado_match === 'Negócio Fechado' ? 'var(--urgency-baixa)' : match.estado_match === 'Visita Agendada' ? 'var(--urgency-media)' : 'var(--accent-blue)',
+                            border: 'none'
+                          }}
+                        >
+                          {match.estado_match}
+                        </span>
+                        <span style={{ fontWeight: 700, color: 'var(--accent-blue)', fontSize: '0.95rem' }}>{match.match_score}%</span>
+                      </div>
+                    </div>
+                  ))}
+
+                {getVisibleMatches().filter(m => activeMatchesTarget.type === 'imovel' ? m.imovel_id === activeMatchesTarget.id : m.comprador_id === activeMatchesTarget.id).length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    Nenhuma oportunidade cruzada ativa de momento para esta ficha.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                <button className="btn btn-secondary" onClick={() => setActiveMatchesTarget(null)}>Fechar</button>
+              </div>
             </div>
           </div>
         </div>
