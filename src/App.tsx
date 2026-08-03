@@ -1802,21 +1802,6 @@ function App() {
               {isLoggingIn ? 'A entrar...' : 'Entrar na Plataforma'}
             </button>
           </form>
-
-          <div className="login-dicas">
-            <span className="dicas-title">Credenciais de Acesso Disponíveis:</span>
-            <div className="dicas-grid">
-              <div className="dica-row">
-                <strong>Administrador:</strong> <span>admin@imo.com</span> (<code>admin123</code>)
-              </div>
-              <div className="dica-row">
-                <strong>João (Agente):</strong> <span>joao@imo.com</span> (<code>joao123</code>)
-              </div>
-              <div className="dica-row">
-                <strong>Tomás (Agente):</strong> <span>tomas@imo.com</span> (<code>tomas123</code>)
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     );
