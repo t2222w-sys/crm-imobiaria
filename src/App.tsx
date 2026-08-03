@@ -3208,34 +3208,6 @@ function App() {
           {/* TAB 6: DEFINIÇÕES */}
           {activeMenu === 'definicoes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%', maxWidth: '800px', margin: '0 auto' }}>
-              <div className="kanban-card" style={{ padding: '2rem' }}>
-                <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Settings size={22} />
-                  <span>Sincronização da Base de Dados</span>
-                </h2>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '1rem', backgroundColor: 'var(--urgency-baixa-bg)', color: 'var(--urgency-baixa)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '1.5rem' }}>
-                  <Check size={20} />
-                  <span style={{ fontWeight: 600 }}>Ligado com Sucesso ao Supabase</span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
-                  <div>
-                    <strong>URL da Base de Dados:</strong>
-                    <code style={{ display: 'block', backgroundColor: 'var(--bg-app)', padding: '6px 10px', borderRadius: '4px', marginTop: '4px', fontSize: '0.8rem' }}>
-                      https://akfykaystwyqzrsxdfjh.supabase.co
-                    </code>
-                  </div>
-                  <div>
-                    <strong>Estado de Segurança:</strong>
-                    <span style={{ color: 'var(--urgency-baixa)', fontWeight: 700, marginLeft: '8px' }}>Ativo (Acesso via Perfis)</span>
-                  </div>
-                  <div>
-                    <strong>Nome de Exibição do Projeto na Cloud:</strong>
-                    <span style={{ fontWeight: 600, marginLeft: '8px' }}>imo</span>
-                  </div>
-                </div>
-              </div>
 
               {/* GESTÃO DE UTILIZADORES (APENAS PARA ADMIN) */}
               {currentUser?.role === 'Admin' ? (
