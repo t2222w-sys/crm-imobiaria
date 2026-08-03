@@ -431,6 +431,7 @@ function App() {
   ];
 
   const origensDisponiveis = [
+    'Proprietário',
     'Idealista',
     'Imovirtual',
     'SuperCasa / Casa SAPO',
@@ -941,6 +942,10 @@ function App() {
       setCObs('');
       setCFoiContactado(false);
       setCDataContacto('');
+      setIsCompradorModalOpen(false);
+      setEditingCompradorId(null);
+      setCompradorFormErrors([]);
+
       setCEstadoComprador('Ativo');
       setCOrigemContacto('Outro');
       setCOrigemContactoPersonalizada('');
@@ -953,10 +958,6 @@ function App() {
       setCCapitalProprio('');
       setCAguardarCredito(false);
       setCAguardarAvaliacao(false);
-
-      setCompradorFormErrors([]);
-      setIsCompradorModalOpen(false);
-      setEditingCompradorId(null);
 
       fetchData();
     } catch (err: any) {
