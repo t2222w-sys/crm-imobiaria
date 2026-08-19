@@ -29,7 +29,8 @@ import {
   Smartphone,
   PanelLeftClose,
   PanelLeftOpen,
-  LogOut
+  LogOut,
+  MessageCircle
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL
@@ -320,7 +321,9 @@ function App() {
 
   // Estados de Edição
   const [editingImovelId, setEditingImovelId] = useState<string | null>(null);
+  const [isViewModeImovel, setIsViewModeImovel] = useState(false);
   const [editingCompradorId, setEditingCompradorId] = useState<string | null>(null);
+  const [isViewModeComprador, setIsViewModeComprador] = useState(false);
   const [editingAtividadeId, setEditingAtividadeId] = useState<string | null>(null);
 
   // Filtros Imóveis
@@ -1987,6 +1990,7 @@ function App() {
               className="btn btn-secondary" 
               onClick={() => {
                 setEditingImovelId(null);
+                setIsViewModeImovel(false);
                 setVNome('');
                 setVContacto('');
                 setVEmail('');
@@ -2010,6 +2014,7 @@ function App() {
               className="btn btn-primary"
               onClick={() => {
                 setEditingCompradorId(null);
+                setIsViewModeComprador(false);
                 setCNome('');
                 setCContacto('');
                 setCEmail('');
@@ -2554,6 +2559,8 @@ function App() {
                   <select value={fImovelEstado} onChange={e => setFImovelEstado(e.target.value)} className="filter-select">
                     <option value="Todos">Todos os Estados</option>
                     <option value="Ativo">🟢 Ativo</option>
+                    <option value="Possivel Negocio">🔵 Possível Negócio</option>
+                    <option value="Num Parceiro">🟣 Num Parceiro</option>
                     <option value="Reservado">🟡 Reservado</option>
                     <option value="Vendido">🔴 Vendido</option>
                     <option value="Inativo">⚫ Inativo</option>
@@ -2611,6 +2618,7 @@ function App() {
                       className="btn btn-primary"
                       onClick={() => {
                         setEditingImovelId(null);
+                        setIsViewModeImovel(false);
                         setVNome('');
                         setVContacto('');
                         setVEmail('');
@@ -2639,9 +2647,10 @@ function App() {
                       <tr>
                         <th>Proprietário</th>
                         <th>Imóvel</th>
+                        <th>Especificações</th>
                         <th>Localização</th>
-                        <th>Preço Anunciado</th>
-                        <th>Área (m²)</th>
+                        <th>Preço Anunciado / m²</th>
+                        <th>Controlo Temporal</th>
                         <th>Estado Ficha</th>
                         <th>Origem</th>
                         <th>Ações</th>
@@ -2649,7 +2658,14 @@ function App() {
                     </thead>
                     <tbody>
                       {getFilteredImoveis().map(imovel => (
-                        <tr key={imovel.id}>
+                        <tr 
+                          key={imovel.id}
+                          onClick={() => {
+                            setIsViewModeImovel(true);
+                            startEditImovel(imovel);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <td>
                             <div style={{ fontWeight: 700 }}>{imovel.proprietario_nome}</div>
                             <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', marginTop: '2px' }}>
@@ -2657,6 +2673,7 @@ function App() {
                                 href={`tel:${imovel.proprietario_contacto}`} 
                                 onClick={(e) => {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   triggerPhoneClient(imovel.proprietario_contacto, showToast);
                                 }}
                                 style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
@@ -2664,11 +2681,22 @@ function App() {
                               >
                                 <Phone size={10} /> {imovel.proprietario_contacto}
                               </a>
+                              <a 
+                                href={`https://wa.me/351${imovel.proprietario_contacto.replace(/\s+/g, '')}?text=${encodeURIComponent(`Olá ${imovel.proprietario_nome}, entro em contacto a respeito do imóvel ${imovel.tipo_imovel} em ${imovel.freguesia}.`)}`}
+                                onClick={(e) => e.stopPropagation()}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#25D366', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                title="Enviar WhatsApp"
+                              >
+                                <MessageCircle size={10} /> WhatsApp
+                              </a>
                               {imovel.proprietario_email && (
                                 <a 
                                   href={`mailto:${imovel.proprietario_email}`} 
                                   onClick={(e) => {
                                     e.preventDefault();
+                                    e.stopPropagation();
                                     triggerEmailClient(imovel.proprietario_email, showToast);
                                   }}
                                   style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
@@ -2680,19 +2708,53 @@ function App() {
                             </div>
                           </td>
                           <td>
-                            <span style={{ fontWeight: 600 }}>{imovel.tipo_imovel}</span>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}> ({imovel.tipologia})</span>
+                            <div style={{ fontWeight: 600 }}>{imovel.tipo_imovel}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{imovel.andar ? `Andar: ${imovel.andar}` : 'Piso N/A'}</div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '0.78rem' }}>
+                              <span style={{ backgroundColor: 'var(--bg-app)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Tipologia">
+                                🛏️ {imovel.tipologia}
+                              </span>
+                              <span style={{ backgroundColor: 'var(--bg-app)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Área Útil">
+                                📐 {imovel.area_m2} m²
+                              </span>
+                              <span style={{ backgroundColor: 'var(--bg-app)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Garagem">
+                                🚗 {imovel.tem_garagem ? 'Sim' : 'Não'}
+                              </span>
+                              <span style={{ backgroundColor: 'var(--bg-app)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'inline-flex', alignItems: 'center', gap: '4px' }} title="Elevador">
+                                🛗 {imovel.tem_elevador ? 'Sim' : 'Não'}
+                              </span>
+                            </div>
                           </td>
                           <td>{imovel.freguesia}, {imovel.cidade}</td>
-                          <td style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(imovel.preco_objetivo)}</td>
-                          <td>{imovel.area_m2} m²</td>
+                          <td>
+                            <div style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{formatCurrency(imovel.preco_objetivo)}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }} title="Preço por metro quadrado">
+                              💶 {formatCurrency(Math.round(imovel.preco_objetivo / (imovel.area_m2 || 1)))}/m²
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                              <span>Criação: </span>
+                              <span style={{ color: 'var(--text-secondary)' }}>{imovel.created_at ? new Date(imovel.created_at).toLocaleDateString('pt-PT') : new Date(imovel.updated_at).toLocaleDateString('pt-PT')}</span>
+                            </div>
+                            {(() => {
+                              const dias = Math.floor((new Date().getTime() - new Date(imovel.updated_at).getTime()) / (1000 * 60 * 60 * 24));
+                              return (
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                  {dias === 0 ? '🔄 Atualizado hoje' : `🔄 Atualizado há ${dias} ${dias === 1 ? 'dia' : 'dias'}`}
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td>
                             <span 
                               className="badge"
                               style={{
                                 border: '1px solid',
-                                backgroundColor: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa-bg)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media-bg)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta-bg)' : 'var(--bg-input)',
-                                color: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta)' : 'var(--text-secondary)',
+                                backgroundColor: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa-bg)' : imovel.estado_imovel === 'Possivel Negocio' ? 'var(--accent-blue-bg)' : imovel.estado_imovel === 'Num Parceiro' ? 'var(--accent-purple-bg)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media-bg)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta-bg)' : 'var(--bg-input)',
+                                color: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa)' : imovel.estado_imovel === 'Possivel Negocio' ? 'var(--accent-blue)' : imovel.estado_imovel === 'Num Parceiro' ? 'var(--accent-purple)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta)' : 'var(--text-secondary)',
                               }}
                             >
                               {imovel.estado_imovel || 'Ativo'}
@@ -2706,7 +2768,10 @@ function App() {
                                 if (imovelMatches.length > 0) {
                                   return (
                                     <button 
-                                      onClick={() => setActiveMatchesTarget({ type: 'imovel', id: imovel.id, name: `${imovel.tipo_imovel} (${imovel.tipologia}) - ${imovel.proprietario_nome}` })}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveMatchesTarget({ type: 'imovel', id: imovel.id, name: `${imovel.tipo_imovel} (${imovel.tipologia}) - ${imovel.proprietario_nome}` });
+                                      }}
                                       className="btn btn-secondary"
                                       style={{ padding: '4px 8px', color: 'var(--accent-gold)', borderColor: 'rgba(180, 83, 9, 0.2)', backgroundColor: 'rgba(180, 83, 9, 0.05)' }}
                                       title={`${imovelMatches.length} Oportunidades Cruzadas`}
@@ -2718,17 +2783,12 @@ function App() {
                                 }
                                 return null;
                               })()}
-                              <button 
-                                onClick={() => startEditImovel(imovel)}
-                                className="btn btn-secondary" 
-                                style={{ padding: '4px 8px' }}
-                                title="Editar"
-                              >
-                                <Edit2 size={14} />
-                              </button>
                               {!currentUser?.parent_agente_id && (
                                 <button 
-                                  onClick={() => handleDeleteImovel(imovel.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteImovel(imovel.id);
+                                  }}
                                   className="btn btn-secondary" 
                                   style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
                                   title="Eliminar"
@@ -2742,8 +2802,12 @@ function App() {
                       ))}
                       {getFilteredImoveis().length === 0 && (
                         <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                            Nenhum imóvel corresponde aos filtros selecionados.
+                          <td colSpan={9} style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)' }}>
+                              <Building size={48} style={{ opacity: 0.2 }} />
+                              <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Nenhum Imóvel Encontrado</h4>
+                              <p style={{ margin: 0, fontSize: '0.85rem' }}>Não existem propriedades que correspondam aos filtros selecionados ou ainda não adicionou nenhum imóvel.</p>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -2755,15 +2819,23 @@ function App() {
                 <div className="mobile-only-view">
                   <div className="mobile-cards-list">
                     {getFilteredImoveis().map(imovel => (
-                      <div key={imovel.id} className="mobile-item-card">
+                      <div 
+                        key={imovel.id} 
+                        className="mobile-item-card"
+                        onClick={() => {
+                          setIsViewModeImovel(true);
+                          startEditImovel(imovel);
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <div className="mobile-card-row header">
                           <span className="mobile-card-name">{imovel.proprietario_nome}</span>
                           <span 
                             className="badge"
                             style={{
                               border: '1px solid',
-                              backgroundColor: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa-bg)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media-bg)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta-bg)' : 'var(--bg-input)',
-                              color: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta)' : 'var(--text-secondary)',
+                              backgroundColor: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa-bg)' : imovel.estado_imovel === 'Possivel Negocio' ? 'var(--accent-blue-bg)' : imovel.estado_imovel === 'Num Parceiro' ? 'var(--accent-purple-bg)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media-bg)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta-bg)' : 'var(--bg-input)',
+                              color: imovel.estado_imovel === 'Ativo' ? 'var(--urgency-baixa)' : imovel.estado_imovel === 'Possivel Negocio' ? 'var(--accent-blue)' : imovel.estado_imovel === 'Num Parceiro' ? 'var(--accent-purple)' : imovel.estado_imovel === 'Reservado' ? 'var(--urgency-media)' : imovel.estado_imovel === 'Vendido' ? 'var(--urgency-alta)' : 'var(--text-secondary)',
                             }}
                           >
                             {imovel.estado_imovel || 'Ativo'}
@@ -2778,6 +2850,7 @@ function App() {
                                 href={`tel:${imovel.proprietario_contacto}`} 
                                 onClick={(e) => {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   triggerPhoneClient(imovel.proprietario_contacto, showToast);
                                 }}
                                 style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
@@ -2789,6 +2862,7 @@ function App() {
                                   href={`mailto:${imovel.proprietario_email}`} 
                                   onClick={(e) => {
                                     e.preventDefault();
+                                    e.stopPropagation();
                                     triggerEmailClient(imovel.proprietario_email, showToast);
                                   }}
                                   style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
@@ -2826,7 +2900,10 @@ function App() {
                             if (imovelMatches.length > 0) {
                               return (
                                 <button 
-                                  onClick={() => setActiveMatchesTarget({ type: 'imovel', id: imovel.id, name: `${imovel.tipo_imovel} (${imovel.tipologia}) - ${imovel.proprietario_nome}` })}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveMatchesTarget({ type: 'imovel', id: imovel.id, name: `${imovel.tipo_imovel} (${imovel.tipologia}) - ${imovel.proprietario_nome}` });
+                                  }}
                                   className="btn btn-secondary btn-sm"
                                   style={{ color: 'var(--accent-gold)', borderColor: 'rgba(180, 83, 9, 0.2)', backgroundColor: 'rgba(180, 83, 9, 0.05)' }}
                                 >
@@ -2837,12 +2914,11 @@ function App() {
                             }
                             return null;
                           })()}
-                          <button onClick={() => startEditImovel(imovel)} className="btn btn-secondary btn-sm">
-                            <Edit2 size={12} />
-                            <span>Editar</span>
-                          </button>
                           {!currentUser?.parent_agente_id && (
-                            <button onClick={() => handleDeleteImovel(imovel.id)} className="btn btn-secondary btn-sm delete-btn">
+                            <button onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteImovel(imovel.id);
+                              }} className="btn btn-secondary btn-sm delete-btn">
                               <Trash2 size={12} />
                               <span>Eliminar</span>
                             </button>
@@ -3002,6 +3078,7 @@ function App() {
                       className="btn btn-primary"
                       onClick={() => {
                         setEditingCompradorId(null);
+                        setIsViewModeComprador(false);
                         setCNome('');
                         setCContacto('');
                         setCEmail('');
@@ -3040,7 +3117,14 @@ function App() {
                     </thead>
                     <tbody>
                       {getFilteredCompradores().map(comp => (
-                        <tr key={comp.id}>
+                        <tr 
+                          key={comp.id}
+                          onClick={() => {
+                            setIsViewModeComprador(true);
+                            startEditComprador(comp);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <td>
                             <div style={{ fontWeight: 700 }}>{comp.comprador_nome}</div>
                             <div style={{ display: 'flex', gap: '8px', fontSize: '0.75rem', marginTop: '2px' }}>
@@ -3048,6 +3132,7 @@ function App() {
                                 href={`tel:${comp.comprador_contacto}`} 
                                 onClick={(e) => {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   triggerPhoneClient(comp.comprador_contacto, showToast);
                                 }}
                                 style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
@@ -3055,11 +3140,22 @@ function App() {
                               >
                                 <Phone size={10} /> {comp.comprador_contacto}
                               </a>
+                              <a 
+                                href={`https://wa.me/351${comp.comprador_contacto.replace(/\s+/g, '')}?text=${encodeURIComponent(`Olá ${comp.comprador_nome}, tenho algumas sugestões de imóveis que podem interessar-lhe.`)}`}
+                                onClick={(e) => e.stopPropagation()}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#25D366', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                title="Enviar WhatsApp"
+                              >
+                                <MessageCircle size={10} /> WhatsApp
+                              </a>
                               {comp.comprador_email && (
                                 <a 
                                   href={`mailto:${comp.comprador_email}`} 
                                   onClick={(e) => {
                                     e.preventDefault();
+                                    e.stopPropagation();
                                     triggerEmailClient(comp.comprador_email, showToast);
                                   }}
                                   style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }} 
@@ -3115,7 +3211,10 @@ function App() {
                                 if (compradorMatches.length > 0) {
                                   return (
                                     <button 
-                                      onClick={() => setActiveMatchesTarget({ type: 'comprador', id: comp.id, name: comp.comprador_nome })}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveMatchesTarget({ type: 'comprador', id: comp.id, name: comp.comprador_nome });
+                                      }}
                                       className="btn btn-secondary"
                                       style={{ padding: '4px 8px', color: 'var(--accent-blue)', borderColor: 'rgba(59, 130, 246, 0.2)', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}
                                       title={`${compradorMatches.length} Oportunidades Cruzadas`}
@@ -3127,17 +3226,12 @@ function App() {
                                 }
                                 return null;
                               })()}
-                              <button 
-                                onClick={() => startEditComprador(comp)}
-                                className="btn btn-secondary" 
-                                style={{ padding: '4px 8px' }}
-                                title="Editar"
-                              >
-                                <Edit2 size={14} />
-                              </button>
                               {!currentUser?.parent_agente_id && (
                                 <button 
-                                  onClick={() => handleDeleteComprador(comp.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteComprador(comp.id);
+                                  }}
                                   className="btn btn-secondary" 
                                   style={{ padding: '4px 8px', color: 'var(--urgency-alta)' }}
                                   title="Eliminar"
@@ -3151,8 +3245,12 @@ function App() {
                       ))}
                       {getFilteredCompradores().length === 0 && (
                         <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                            Nenhum comprador corresponde aos filtros aplicados.
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)' }}>
+                              <Users size={48} style={{ opacity: 0.2 }} />
+                              <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Nenhum Comprador Encontrado</h4>
+                              <p style={{ margin: 0, fontSize: '0.85rem' }}>Não existem compradores que correspondam aos filtros selecionados ou ainda não registou nenhum.</p>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -3164,7 +3262,15 @@ function App() {
                 <div className="mobile-only-view">
                   <div className="mobile-cards-list">
                     {getFilteredCompradores().map(comp => (
-                      <div key={comp.id} className="mobile-item-card">
+                      <div 
+                        key={comp.id} 
+                        className="mobile-item-card"
+                        onClick={() => {
+                          setIsViewModeComprador(true);
+                          startEditComprador(comp);
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <div className="mobile-card-row header">
                           <span className="mobile-card-name">{comp.comprador_nome}</span>
                           <span 
@@ -3187,6 +3293,7 @@ function App() {
                                 href={`tel:${comp.comprador_contacto}`} 
                                 onClick={(e) => {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   triggerPhoneClient(comp.comprador_contacto, showToast);
                                 }}
                                 style={{ color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
@@ -3198,6 +3305,7 @@ function App() {
                                   href={`mailto:${comp.comprador_email}`} 
                                   onClick={(e) => {
                                     e.preventDefault();
+                                    e.stopPropagation();
                                     triggerEmailClient(comp.comprador_email, showToast);
                                   }}
                                   style={{ color: 'var(--accent-gold)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
@@ -3250,7 +3358,10 @@ function App() {
                             if (compradorMatches.length > 0) {
                               return (
                                 <button 
-                                  onClick={() => setActiveMatchesTarget({ type: 'comprador', id: comp.id, name: comp.comprador_nome })}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveMatchesTarget({ type: 'comprador', id: comp.id, name: comp.comprador_nome });
+                                  }}
                                   className="btn btn-secondary btn-sm"
                                   style={{ color: 'var(--accent-blue)', borderColor: 'rgba(59, 130, 246, 0.2)', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}
                                 >
@@ -3261,12 +3372,11 @@ function App() {
                             }
                             return null;
                           })()}
-                          <button onClick={() => startEditComprador(comp)} className="btn btn-secondary btn-sm">
-                            <Edit2 size={12} />
-                            <span>Editar</span>
-                          </button>
                           {!currentUser?.parent_agente_id && (
-                            <button onClick={() => handleDeleteComprador(comp.id)} className="btn btn-secondary btn-sm delete-btn">
+                            <button onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteComprador(comp.id);
+                              }} className="btn btn-secondary btn-sm delete-btn">
                               <Trash2 size={12} />
                               <span>Eliminar</span>
                             </button>
@@ -3736,12 +3846,21 @@ function App() {
         <div className="modal-overlay">
           <div className="modal-content-card">
             <div className="modal-header">
-              <h3 className="modal-title">{editingImovelId ? 'Editar Imóvel' : 'Registar Novo Imóvel'}</h3>
-              <button className="modal-close-btn" onClick={() => setIsImovelModalOpen(false)}>
-                <X size={20} />
-              </button>
+              <h3 className="modal-title">{isViewModeImovel ? 'Detalhes do Imóvel' : editingImovelId ? 'Editar Imóvel' : 'Registar Novo Imóvel'}</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {isViewModeImovel && (
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsViewModeImovel(false)} title="Editar Ficha">
+                    <Edit2 size={16} />
+                    <span>Editar</span>
+                  </button>
+                )}
+                <button className="modal-close-btn" onClick={() => setIsImovelModalOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
             </div>
             <form onSubmit={handleAddImovel} className="modal-body form-grid">
+              <fieldset disabled={isViewModeImovel} style={{ border: 'none', padding: 0, margin: 0, display: 'contents' }}>
               
               <div className="form-group form-group-full">
                 <label>Proprietário (Nome)*</label>
@@ -3916,6 +4035,8 @@ function App() {
                 <label>Estado de Acompanhamento (Etapa)*</label>
                 <select value={vEstadoImovel} onChange={(e) => setVEstadoImovel(e.target.value)}>
                   <option value="Ativo">🟢 Ativo (Para Venda)</option>
+                  <option value="Possivel Negocio">🔵 Possível Negócio (Em Negociação)</option>
+                  <option value="Num Parceiro">🟣 Num Parceiro (Partilha)</option>
                   <option value="Reservado">🟡 Reservado (Sinalizado)</option>
                   <option value="Vendido">🔴 Vendido (Escritura Realizada)</option>
                   <option value="Inativo">⚫ Inativo / Suspenso</option>
@@ -4028,11 +4149,13 @@ function App() {
                 />
               </div>
 
-              <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsImovelModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Gravar Imóvel</button>
-              </div>
-
+              </fieldset>
+              {!isViewModeImovel && (
+                <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsImovelModalOpen(false)}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary">Gravar Imóvel</button>
+                </div>
+              )}
             </form>
           </div>
         </div>
@@ -4043,12 +4166,21 @@ function App() {
         <div className="modal-overlay">
           <div className="modal-content-card">
             <div className="modal-header">
-              <h3 className="modal-title">{editingCompradorId ? 'Editar Perfil de Comprador' : 'Registar Lead de Comprador'}</h3>
-              <button className="modal-close-btn" onClick={() => setIsCompradorModalOpen(false)}>
-                <X size={20} />
-              </button>
+              <h3 className="modal-title">{isViewModeComprador ? 'Detalhes do Comprador' : editingCompradorId ? 'Editar Perfil de Comprador' : 'Registar Lead de Comprador'}</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {isViewModeComprador && (
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsViewModeComprador(false)} title="Editar Ficha">
+                    <Edit2 size={16} />
+                    <span>Editar</span>
+                  </button>
+                )}
+                <button className="modal-close-btn" onClick={() => setIsCompradorModalOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
             </div>
             <form onSubmit={handleAddComprador} className="modal-body form-grid">
+              <fieldset disabled={isViewModeComprador} style={{ border: 'none', padding: 0, margin: 0, display: 'contents' }}>
               
               <div className="form-group form-group-full">
                 <label>Comprador (Nome)*</label>
@@ -4412,11 +4544,13 @@ function App() {
                 )}
               </div>
 
-              <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsCompradorModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Gravar Lead</button>
-              </div>
-
+              </fieldset>
+              {!isViewModeComprador && (
+                <div className="form-group-full" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsCompradorModalOpen(false)}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary">Gravar Lead</button>
+                </div>
+              )}
             </form>
           </div>
         </div>
@@ -5063,7 +5197,17 @@ function App() {
                         >
                           {match.estado_match}
                         </span>
-                        <span style={{ fontWeight: 700, color: 'var(--accent-blue)', fontSize: '0.95rem' }}>{match.match_score}%</span>
+                        <span style={{
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          color: '#fff',
+                          background: match.match_score >= 80 ? 'linear-gradient(135deg, #10b981, #059669)' : match.match_score >= 60 ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                          {match.match_score}%
+                        </span>
                       </div>
                     </div>
                   ))}
