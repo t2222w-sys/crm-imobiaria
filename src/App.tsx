@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase, isSupabaseConfigured } from './lib/supabaseClient';
 import { 
   Home, 
@@ -30,7 +31,15 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
-  MessageCircle
+  MessageCircle,
+  FileSpreadsheet,
+  UploadCloud,
+  ExternalLink,
+  Compass,
+  CheckCircle2,
+  Search,
+  UserCheck,
+  Building2
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL
@@ -129,6 +138,30 @@ interface Atividade {
   comprador_id: string | null;
   imovel_id: string | null;
   notas: string | null;
+  created_at: string;
+}
+
+export interface ImovelImportado {
+  id: string;
+  titulo: string;
+  tipo_imovel: string;
+  tipologia: string;
+  quartos: number | null;
+  banheiros: number | null;
+  preco: number;
+  area_m2: number;
+  preco_m2: number;
+  conservacao: string;
+  localizacao: string;
+  portal: string;
+  url_portal: string;
+  url_betterplace?: string;
+  tipo_anunciante: 'Particular' | 'Agência';
+  nome_anunciante: string;
+  telefone_anunciante: string;
+  outros_telefones?: string;
+  data_publicacao?: string;
+  promovido_oficial?: boolean;
   created_at: string;
 }
 
@@ -292,8 +325,26 @@ function App() {
   const [novoAgenteRole, setNovoAgenteRole] = useState<'Admin' | 'Agente'>('Agente');
 
   // Navegação
-  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'definicoes'>('kanban');
+  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'importacoes' | 'definicoes'>('kanban');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Estados da Carteira de Importações (Radar BetterPlace)
+  const [imoveisImportados, setImoveisImportados] = useState<ImovelImportado[]>(() => {
+    const saved = localStorage.getItem('crm_imoveis_importados_radar');
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isImportingFile, setIsImportingFile] = useState(false);
+  const [fImportPesquisa, setFImportPesquisa] = useState('');
+  const [fImportPortal, setFImportPortal] = useState<string>('Todos');
+  const [fImportAnunciante, setFImportAnunciante] = useState<'Todos' | 'Particular' | 'Agência'>('Todos');
+  const [fImportTipologia, setFImportTipologia] = useState<string>('Todos');
+  const [fImportOnlyMatches, setFImportOnlyMatches] = useState<boolean>(false);
+  const [expandedImportMatches, setExpandedImportMatches] = useState<Record<string, boolean>>({});
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   // Modais Gerais
   const [isImovelModalOpen, setIsImovelModalOpen] = useState(false);
@@ -623,6 +674,323 @@ function App() {
   useEffect(() => {
     fetchData();
   }, [currentUser]);
+
+  // Persistência da Carteira de Importações
+  useEffect(() => {
+    try {
+      localStorage.setItem('crm_imoveis_importados_radar', JSON.stringify(imoveisImportados));
+    } catch (e) {
+      console.error('Erro ao guardar importações no localStorage:', e);
+    }
+  }, [imoveisImportados]);
+
+  // Parser Universal para Ficheiros BetterPlace (XLS, XLSX, CSV, TSV)
+  const parseBetterPlaceBuffer = (data: ArrayBuffer): ImovelImportado[] => {
+    const wb = XLSX.read(data, { type: 'array', cellDates: true });
+    if (!wb.SheetNames || wb.SheetNames.length === 0) return [];
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    if (!ws || !ws['!ref']) return [];
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const headers: string[] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: range.s.r, c })];
+      headers.push(cell && cell.v !== undefined && cell.v !== null ? String(cell.v).trim() : '');
+    }
+
+    const items: ImovelImportado[] = [];
+
+    for (let r = range.s.r + 1; r <= range.e.r; r++) {
+      const rowObj: Record<string, any> = {};
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cellCoord = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[cellCoord];
+        const h = headers[c];
+        if (h) {
+          rowObj[h] = cell && cell.v !== undefined && cell.v !== null ? cell.v : null;
+          if (cell && cell.l && cell.l.Target) {
+            rowObj[h + '_link'] = cell.l.Target;
+          }
+        }
+      }
+
+      const titulo = String(rowObj['Título'] || rowObj['Titulo'] || rowObj['Title'] || '').trim();
+      if (!titulo && !rowObj['Preço'] && !rowObj['Preco']) continue;
+
+      // Quartos & Tipologia
+      let quartosNum: number | null = null;
+      if (rowObj['Quartos'] !== undefined && rowObj['Quartos'] !== null) {
+        const parsed = parseInt(String(rowObj['Quartos']).replace(/\D/g, ''), 10);
+        if (!isNaN(parsed)) quartosNum = parsed;
+      }
+      let tipologia = quartosNum !== null ? `T${quartosNum}` : 'T2';
+      if (quartosNum === null) {
+        const m = titulo.match(/T([0-9](\+[0-9])?)/i);
+        if (m) {
+          tipologia = m[0].toUpperCase();
+        } else if (/moradia/i.test(titulo)) {
+          tipologia = 'T3';
+        }
+      }
+
+      // Banheiros
+      let banheirosNum: number | null = null;
+      if (rowObj['Banheiros'] !== undefined && rowObj['Banheiros'] !== null) {
+        const parsed = parseInt(String(rowObj['Banheiros']).replace(/\D/g, ''), 10);
+        if (!isNaN(parsed)) banheirosNum = parsed;
+      }
+
+      // Preço
+      let preco = 0;
+      if (rowObj['Preço'] !== undefined && rowObj['Preço'] !== null) {
+        const rawP = String(rowObj['Preço']).replace(/[^0-9]/g, '');
+        preco = Number(rawP) || 0;
+      } else if (rowObj['Preco'] !== undefined) {
+        const rawP = String(rowObj['Preco']).replace(/[^0-9]/g, '');
+        preco = Number(rawP) || 0;
+      }
+
+      // Área
+      let area_m2 = 0;
+      if (rowObj['Área'] !== undefined && rowObj['Área'] !== null) {
+        const rawA = String(rowObj['Área']).replace(/[^0-9]/g, '');
+        area_m2 = Number(rawA) || 0;
+      } else if (rowObj['Area'] !== undefined) {
+        const rawA = String(rowObj['Area']).replace(/[^0-9]/g, '');
+        area_m2 = Number(rawA) || 0;
+      }
+
+      // Preço / m2
+      let preco_m2 = 0;
+      if (rowObj['€/m²'] !== undefined && rowObj['€/m²'] !== null) {
+        const rawPm = String(rowObj['€/m²']).replace(/[^0-9]/g, '');
+        preco_m2 = Number(rawPm) || 0;
+      } else if (area_m2 > 0 && preco > 0) {
+        preco_m2 = Math.round(preco / area_m2);
+      }
+
+      // Tipo de Imóvel
+      let tipo_imovel = 'Apartamento';
+      if (/moradia/i.test(titulo)) tipo_imovel = 'Moradia';
+      else if (/terreno/i.test(titulo)) tipo_imovel = 'Terreno';
+      else if (/quinta|herdade/i.test(titulo)) tipo_imovel = 'Quinta';
+      else if (/duplex/i.test(titulo)) tipo_imovel = 'Duplex';
+      else if (/loja|comercial/i.test(titulo)) tipo_imovel = 'Comercial';
+      else if (/prédio|predio/i.test(titulo)) tipo_imovel = 'Prédio';
+
+      // Conservação
+      const conservacao = String(rowObj['Conservação'] || rowObj['Conservacao'] || 'Bom estado').trim();
+
+      // Portal
+      const rawPortal = String(rowObj['Portal imobiliário'] || rowObj['Portal'] || '').trim().toLowerCase();
+      let portal = 'Outro';
+      if (rawPortal.includes('idealista')) portal = 'Idealista';
+      else if (rawPortal.includes('supercasa')) portal = 'SuperCasa';
+      else if (rawPortal.includes('imovirtual')) portal = 'Imovirtual';
+      else if (rawPortal.includes('sapo') || rawPortal.includes('casasapo')) portal = 'Casa Sapo';
+      else if (rawPortal) portal = rawPortal.charAt(0).toUpperCase() + rawPortal.slice(1);
+
+      // URL do Portal (extrai link direto dos portais)
+      let url_portal = '';
+      Object.keys(rowObj).forEach(k => {
+        if (k.endsWith('_link')) {
+          const lVal = String(rowObj[k]);
+          if (lVal.includes('idealista.pt') || lVal.includes('supercasa.pt') || lVal.includes('imovirtual.com') || lVal.includes('casa.sapo.pt') || lVal.includes('olx.pt')) {
+            url_portal = lVal;
+          }
+        }
+      });
+      if (!url_portal && rowObj['URL do portal'] && String(rowObj['URL do portal']).startsWith('http')) {
+        url_portal = String(rowObj['URL do portal']);
+      }
+
+      // URL BetterPlace
+      let url_betterplace = '';
+      Object.keys(rowObj).forEach(k => {
+        if (k.endsWith('_link') && String(rowObj[k]).includes('betterplaceapp.com')) {
+          url_betterplace = String(rowObj[k]);
+        }
+      });
+
+      // Anunciante & Contactos
+      const rawTipoAnunc = String(rowObj['Tipo de anunciante'] || '').trim();
+      const rawNomeAnunc = String(rowObj['Nome do anunciante'] || '').trim();
+      const rawTelAnunc = String(rowObj['Telefone do anunciante'] || '').trim();
+      const rawOutrosTel = String(rowObj['Outros telefones (P = Particular, A = Agência)'] || rowObj['Outros telefones'] || '').trim();
+
+      const isParticular = /particular|propriet[aá]rio/i.test(rawTipoAnunc) || /particular|propriet[aá]rio/i.test(rawNomeAnunc);
+      const tipo_anunciante: 'Particular' | 'Agência' = isParticular ? 'Particular' : 'Agência';
+
+      let nome_anunciante = '';
+      if (isParticular) {
+        nome_anunciante = rawNomeAnunc && !rawNomeAnunc.includes('+351') && !/^[0-9\s]+$/.test(rawNomeAnunc) ? rawNomeAnunc : 'Proprietário Particular';
+      } else {
+        nome_anunciante = rawTipoAnunc || rawNomeAnunc || 'Agência Parceira';
+        if (nome_anunciante.startsWith('+351') || /^[0-9\s]+$/.test(nome_anunciante)) {
+          nome_anunciante = rawTipoAnunc || 'Agência Parceira';
+        }
+      }
+
+      // Extração de telefone
+      let telefone_anunciante = '';
+      if (rawTelAnunc && rawTelAnunc !== 'null') {
+        telefone_anunciante = rawTelAnunc;
+      } else if (rawNomeAnunc && (rawNomeAnunc.startsWith('+351') || /^[0-9\s]{9,15}$/.test(rawNomeAnunc))) {
+        telefone_anunciante = rawNomeAnunc;
+      } else if (rawOutrosTel && rawOutrosTel.includes('+351')) {
+        const firstMatch = rawOutrosTel.match(/\+?[0-9\s]{9,15}/);
+        if (firstMatch) telefone_anunciante = firstMatch[0];
+      }
+
+      // Localização extraída do título
+      let localizacao = titulo;
+      const locMatch = titulo.match(/(?:em|na|no|de)\s+([A-ZÀ-Ú][a-zà-ú0-9\s,\-]+)$/i);
+      if (locMatch && locMatch[1]) {
+        localizacao = locMatch[1].trim();
+      }
+
+      items.push({
+        id: 'imp_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now(),
+        titulo: titulo || 'Imóvel sem título',
+        tipo_imovel,
+        tipologia,
+        quartos: quartosNum,
+        banheiros: banheirosNum,
+        preco,
+        area_m2,
+        preco_m2,
+        conservacao,
+        localizacao,
+        portal,
+        url_portal,
+        url_betterplace,
+        tipo_anunciante,
+        nome_anunciante,
+        telefone_anunciante,
+        outros_telefones: rawOutrosTel || undefined,
+        data_publicacao: rowObj['Data de publicação'] && !String(rowObj['Data de publicação']).includes('http') ? String(rowObj['Data de publicação']) : undefined,
+        promovido_oficial: false,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    return items;
+  };
+
+  // Motor de Matchmaking para Imóveis da Carteira de Importações
+  const getMatchesForImportado = (imovel: ImovelImportado) => {
+    return compradores.map(comp => {
+      let score = 0;
+      const reasons: string[] = [];
+
+      // 1. Orçamento (40%)
+      if (imovel.preco > 0 && comp.orcamento_maximo > 0) {
+        if (imovel.preco <= comp.orcamento_maximo) {
+          score += 40;
+          reasons.push('Orçamento dentro do limite');
+        } else if (imovel.preco <= comp.orcamento_maximo * 1.10) {
+          score += 25;
+          reasons.push('Preço até 10% acima do orçamento (negociável)');
+        } else if (imovel.preco <= comp.orcamento_maximo * 1.20) {
+          score += 10;
+          reasons.push('Preço até 20% acima do orçamento');
+        }
+      } else {
+        score += 20;
+      }
+
+      // 2. Tipologia (30%)
+      if (comp.tipologias_pretendidas && comp.tipologias_pretendidas.length > 0) {
+        if (comp.tipologias_pretendidas.includes(imovel.tipologia)) {
+          score += 30;
+          reasons.push(`Tipologia ${imovel.tipologia} pretendida`);
+        }
+      } else {
+        score += 20;
+      }
+
+      // 3. Tipo de Imóvel (20%)
+      if (comp.tipos_imovel_pretendidos && comp.tipos_imovel_pretendidos.length > 0) {
+        if (comp.tipos_imovel_pretendidos.includes(imovel.tipo_imovel)) {
+          score += 20;
+          reasons.push(`Tipo ${imovel.tipo_imovel} procurado`);
+        }
+      } else {
+        score += 15;
+      }
+
+      // 4. Localização / Zonas (10%)
+      if (comp.zonas_pretendidas && comp.zonas_pretendidas.length > 0) {
+        const textToSearch = (imovel.titulo + ' ' + imovel.localizacao).toLowerCase();
+        const hasZone = comp.zonas_pretendidas.some(z => textToSearch.includes(z.toLowerCase()));
+        if (hasZone) {
+          score += 10;
+          reasons.push('Zona pretendida compatível');
+        }
+      } else {
+        score += 10;
+      }
+
+      return {
+        comprador: comp,
+        score: Math.min(100, score),
+        reasons
+      };
+    })
+    .filter(m => m.score >= 50)
+    .sort((a, b) => b.score - a.score);
+  };
+
+  // Upload e Processamento de Ficheiro BetterPlace
+  const handleFileUploadBetterPlace = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsImportingFile(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const newItems = parseBetterPlaceBuffer(buffer);
+      if (newItems.length === 0) {
+        showToast('Nenhum registo válido encontrado no ficheiro.', 'error');
+      } else {
+        setImoveisImportados(prev => {
+          const existingKeys = new Set(prev.map(p => `${p.titulo}_${p.preco}`));
+          const filtered = newItems.filter(n => !existingKeys.has(`${n.titulo}_${n.preco}`));
+          return [...filtered, ...prev];
+        });
+        showToast(`Sucesso! ${newItems.length} imóveis importados para a Carteira de Importações.`, 'success');
+      }
+    } catch (err: any) {
+      showToast('Erro ao processar ficheiro: ' + err.message, 'error');
+    } finally {
+      setIsImportingFile(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  // Promoção Seletiva de Imóvel Importado para a Carteira Oficial
+  const handlePromoteImportado = (imovel: ImovelImportado) => {
+    setVNome(imovel.nome_anunciante || (imovel.tipo_anunciante === 'Particular' ? 'Proprietário Particular' : 'Agência Parceira'));
+    setVContacto(imovel.telefone_anunciante || '');
+    setVEmail('');
+    setVTipoImovel(imovel.tipo_imovel || 'Apartamento');
+    setVTipologia(imovel.tipologia || 'T2');
+    setVPrecoObj(imovel.preco > 0 ? String(imovel.preco) : '');
+    setVPrecoMin(imovel.preco > 0 ? String(Math.round(imovel.preco * 0.95)) : '');
+    setVArea(imovel.area_m2 > 0 ? String(imovel.area_m2) : '');
+    setVRua(imovel.localizacao || imovel.titulo);
+    setVCidade('Beja');
+    setVFreguesia(imovel.localizacao);
+    setVOrigemContacto('BetterPlace');
+    setVEstadoImovel(imovel.tipo_anunciante === 'Agência' ? 'Num Parceiro' : 'Ativo');
+
+    // Marcar como promovido na lista
+    setImoveisImportados(prev => prev.map(item => item.id === imovel.id ? { ...item, promovido_oficial: true } : item));
+
+    setEditingImovelId(null);
+    setIsViewModeImovel(false);
+    setIsImovelModalOpen(true);
+    showToast('Dados transferidos para o formulário oficial de Imóvel! Reveja e clique em Gravar.', 'success');
+  };
 
   // Handlers de Autenticação e Agentes
   const handleLogin = (e: React.FormEvent) => {
@@ -1906,6 +2274,31 @@ function App() {
           </button>
 
           <button 
+            className={`menu-item ${activeMenu === 'importacoes' ? 'active' : ''}`}
+            onClick={() => setActiveMenu('importacoes')}
+            style={{ position: 'relative' }}
+          >
+            <FileSpreadsheet size={18} />
+            <span>Importações (Radar)</span>
+            {imoveisImportados.length > 0 && (
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'var(--accent-blue)',
+                color: '#fff',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                padding: '1px 6px',
+                borderRadius: '10px'
+              }}>
+                {imoveisImportados.length}
+              </span>
+            )}
+          </button>
+
+          <button 
             className={`menu-item ${activeMenu === 'definicoes' ? 'active' : ''}`}
             onClick={() => setActiveMenu('definicoes')}
           >
@@ -1948,6 +2341,7 @@ function App() {
               {activeMenu === 'imoveis' && 'Base de Dados de Imóveis'}
               {activeMenu === 'compradores' && 'Base de Dados de Compradores'}
               {activeMenu === 'calendario' && 'Calendário de Atividades'}
+              {activeMenu === 'importacoes' && 'Carteira de Importações & Radar BetterPlace'}
               {activeMenu === 'definicoes' && 'Definições do Sistema'}
             </div>
           </div>
@@ -3572,7 +3966,642 @@ function App() {
             </div>
           )}
 
-          {/* TAB 6: DEFINIÇÕES */}
+          {/* TAB 6: CARTEIRA DE IMPORTAÇÕES & RADAR BETTERPLACE */}
+          {activeMenu === 'importacoes' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              
+              {/* Input escondido para upload */}
+              <input 
+                ref={importFileInputRef}
+                type="file" 
+                accept=".xls,.xlsx,.csv,.tsv" 
+                style={{ display: 'none' }} 
+                onChange={handleFileUploadBetterPlace}
+              />
+
+              {/* Cabeçalho da Aba */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Compass size={24} style={{ color: 'var(--accent-blue)' }} />
+                    <span>Carteira de Importações & Radar BetterPlace</span>
+                  </h2>
+                  <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    Importe exportações do BetterPlace (CSV/XLS), analise os anunciantes e cruze automaticamente os imóveis com os seus compradores qualificados.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => importFileInputRef.current?.click()}
+                    disabled={isImportingFile}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <UploadCloud size={16} />
+                    <span>{isImportingFile ? 'A importar...' : 'Importar Ficheiro BetterPlace'}</span>
+                  </button>
+
+                  {imoveisImportados.length > 0 && (
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        if (window.confirm('Tem a certeza que deseja limpar todos os imóveis da Carteira de Importações?')) {
+                          setImoveisImportados([]);
+                          showToast('Carteira de Importações esvaziada.', 'success');
+                        }
+                      }}
+                      style={{ color: 'var(--urgency-alta)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                      title="Limpar todos os registos importados"
+                    >
+                      <Trash2 size={16} />
+                      <span>Limpar Carteira</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Zona de Drag & Drop para Upload Rápido */}
+              <div 
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) {
+                    const fakeEvent = { target: { files: [file], value: '' } } as any;
+                    handleFileUploadBetterPlace(fakeEvent);
+                  }
+                }}
+                onClick={() => importFileInputRef.current?.click()}
+                style={{
+                  border: '2px dashed var(--border-color)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: imoveisImportados.length === 0 ? '3rem 2rem' : '1.25rem 1.5rem',
+                  backgroundColor: 'var(--bg-surface)',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: imoveisImportados.length === 0 ? 'column' : 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--accent-blue-bg)',
+                  color: 'var(--accent-blue)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <FileSpreadsheet size={22} />
+                </div>
+                <div style={{ textAlign: imoveisImportados.length === 0 ? 'center' : 'left' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                    {imoveisImportados.length === 0 ? 'Arraste e solte o ficheiro de exportação do BetterPlace aqui' : 'Importar nova lista do BetterPlace'}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Suporta ficheiros <strong>.xls</strong>, <strong>.xlsx</strong>, <strong>.csv</strong> ou <strong>.tsv</strong> exportados do BetterPlace
+                  </div>
+                </div>
+              </div>
+
+              {/* Indicadores / Estatísticas Rápidas */}
+              {imoveisImportados.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                  <div className="kanban-card" style={{ padding: '1rem 1.25rem', borderLeft: '4px solid var(--accent-blue)' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total no Radar</div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
+                      {imoveisImportados.length}
+                    </div>
+                  </div>
+
+                  <div className="kanban-card" style={{ padding: '1rem 1.25rem', borderLeft: '4px solid #10b981' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#065f46', textTransform: 'uppercase' }}>🟢 Particulares (FSBO)</div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981', marginTop: '4px' }}>
+                      {imoveisImportados.filter(i => i.tipo_anunciante === 'Particular').length}
+                    </div>
+                  </div>
+
+                  <div className="kanban-card" style={{ padding: '1rem 1.25rem', borderLeft: '4px solid #3b82f6' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1e40af', textTransform: 'uppercase' }}>🏢 Agências (Partilhas)</div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#3b82f6', marginTop: '4px' }}>
+                      {imoveisImportados.filter(i => i.tipo_anunciante === 'Agência').length}
+                    </div>
+                  </div>
+
+                  <div className="kanban-card" style={{ padding: '1rem 1.25rem', borderLeft: '4px solid var(--accent-gold)' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#92400e', textTransform: 'uppercase' }}>🎯 Com Matches Quentes</div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-gold)', marginTop: '4px' }}>
+                      {imoveisImportados.filter(i => getMatchesForImportado(i).some(m => m.score >= 70)).length}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Barra de Filtros e Pesquisa */}
+              {imoveisImportados.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                  alignItems: 'center',
+                  backgroundColor: 'var(--bg-surface)',
+                  padding: '1rem',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  {/* Pesquisa */}
+                  <div style={{ flex: '1 1 220px', minWidth: '200px', position: 'relative' }}>
+                    <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input 
+                      type="text" 
+                      className="input-text"
+                      placeholder="Pesquisar por título, rua, anunciante ou tel..."
+                      value={fImportPesquisa}
+                      onChange={(e) => setFImportPesquisa(e.target.value)}
+                      style={{ paddingLeft: '32px', height: '36px', fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  {/* Filtro Anunciante */}
+                  <select 
+                    value={fImportAnunciante} 
+                    onChange={(e) => setFImportAnunciante(e.target.value as any)}
+                    className="filter-select"
+                    style={{ height: '36px', fontSize: '0.85rem' }}
+                  >
+                    <option value="Todos">Todos os Anunciantes</option>
+                    <option value="Particular">🟢 Apenas Particulares (FSBO)</option>
+                    <option value="Agência">🏢 Apenas Agências</option>
+                  </select>
+
+                  {/* Filtro Portal */}
+                  <select 
+                    value={fImportPortal} 
+                    onChange={(e) => setFImportPortal(e.target.value)}
+                    className="filter-select"
+                    style={{ height: '36px', fontSize: '0.85rem' }}
+                  >
+                    <option value="Todos">Todos os Portais</option>
+                    <option value="Idealista">Idealista</option>
+                    <option value="SuperCasa">SuperCasa</option>
+                    <option value="Imovirtual">Imovirtual</option>
+                    <option value="Casa Sapo">Casa Sapo</option>
+                  </select>
+
+                  {/* Filtro Tipologia */}
+                  <select 
+                    value={fImportTipologia} 
+                    onChange={(e) => setFImportTipologia(e.target.value)}
+                    className="filter-select"
+                    style={{ height: '36px', fontSize: '0.85rem' }}
+                  >
+                    <option value="Todos">Todas as Tipologias</option>
+                    <option value="T1">T1</option>
+                    <option value="T2">T2</option>
+                    <option value="T3">T3</option>
+                    <option value="T4">T4</option>
+                    <option value="T5+">T5+</option>
+                  </select>
+
+                  {/* Toggle Matches */}
+                  <button 
+                    type="button"
+                    className={`btn ${fImportOnlyMatches ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setFImportOnlyMatches(!fImportOnlyMatches)}
+                    style={{ height: '36px', fontSize: '0.82rem', padding: '0 12px' }}
+                  >
+                    <Sparkles size={14} />
+                    <span>Apenas com Matches</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Lista / Grelha de Imóveis Importados */}
+              {imoveisImportados.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {(() => {
+                    const filtered = imoveisImportados.filter(item => {
+                      // Pesquisa
+                      if (fImportPesquisa) {
+                        const q = fImportPesquisa.toLowerCase();
+                        const matchText = (item.titulo + ' ' + item.localizacao + ' ' + item.nome_anunciante + ' ' + item.telefone_anunciante).toLowerCase();
+                        if (!matchText.includes(q)) return false;
+                      }
+                      // Anunciante
+                      if (fImportAnunciante !== 'Todos' && item.tipo_anunciante !== fImportAnunciante) return false;
+                      // Portal
+                      if (fImportPortal !== 'Todos' && item.portal.toLowerCase() !== fImportPortal.toLowerCase()) return false;
+                      // Tipologia
+                      if (fImportTipologia !== 'Todos' && item.tipologia !== fImportTipologia) return false;
+                      // Matches
+                      if (fImportOnlyMatches) {
+                        const matches = getMatchesForImportado(item);
+                        if (matches.length === 0) return false;
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="empty-state" style={{ padding: '3rem 1rem' }}>
+                          <Compass className="empty-state-icon" />
+                          <div className="empty-state-title">Nenhum Imóvel Corresponde aos Filtros</div>
+                          <div className="empty-state-desc">Tente alterar ou limpar os filtros de pesquisa para visualizar outros imóveis da carteira de importações.</div>
+                        </div>
+                      );
+                    }
+
+                    return filtered.map(imovel => {
+                      const matches = getMatchesForImportado(imovel);
+                      const isExpanded = !!expandedImportMatches[imovel.id];
+                      const bestScore = matches.length > 0 ? matches[0].score : 0;
+
+                      // Cores temáticas por portal
+                      const getPortalBadgeStyle = (portal: string) => {
+                        const pLower = portal.toLowerCase();
+                        if (pLower.includes('idealista')) return { bg: '#ffeaf1', color: '#c4004f', border: '#f8b4cb' };
+                        if (pLower.includes('supercasa')) return { bg: '#e6f2ff', color: '#0066cc', border: '#b3d7ff' };
+                        if (pLower.includes('imovirtual')) return { bg: '#fff0e6', color: '#d94800', border: '#ffcbb3' };
+                        if (pLower.includes('sapo')) return { bg: '#e6f7ee', color: '#008744', border: '#b3e6cb' };
+                        return { bg: 'var(--bg-app)', color: 'var(--text-secondary)', border: 'var(--border-color)' };
+                      };
+
+                      const pStyle = getPortalBadgeStyle(imovel.portal);
+
+                      return (
+                        <div 
+                          key={imovel.id}
+                          className="kanban-card"
+                          style={{
+                            padding: '1.25rem',
+                            borderLeft: imovel.tipo_anunciante === 'Particular' ? '5px solid #10b981' : '5px solid #3b82f6',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '1rem',
+                            position: 'relative'
+                          }}
+                        >
+                          {/* Linha Superior: Badges e Preço */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                              
+                              {/* Portal Badge */}
+                              <span 
+                                style={{
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: pStyle.bg,
+                                  color: pStyle.color,
+                                  border: `1px solid ${pStyle.border}`,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                🌐 {imovel.portal}
+                              </span>
+
+                              {/* Quem está a anunciar (Particular vs Agência) */}
+                              {imovel.tipo_anunciante === 'Particular' ? (
+                                <span 
+                                  style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#ecfdf5',
+                                    color: '#065f46',
+                                    border: '1px solid #a7f3d0',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <UserCheck size={13} />
+                                  <span>PARTICULAR (FSBO): {imovel.nome_anunciante}</span>
+                                </span>
+                              ) : (
+                                <span 
+                                  style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#eff6ff',
+                                    color: '#1e40af',
+                                    border: '1px solid #bfdbfe',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <Building2 size={13} />
+                                  <span>AGÊNCIA: {imovel.nome_anunciante}</span>
+                                </span>
+                              )}
+
+                              {/* Tipologia & Tipo */}
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, padding: '3px 8px', borderRadius: '6px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                                {imovel.tipo_imovel} • {imovel.tipologia}
+                              </span>
+
+                              {imovel.promovido_oficial && (
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <CheckCircle2 size={12} /> Na Carteira Oficial
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Preço de Anúncio */}
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-blue)', letterSpacing: '-0.5px' }}>
+                                {formatCurrency(imovel.preco)}
+                              </div>
+                              {imovel.area_m2 > 0 && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  {imovel.area_m2} m² • {imovel.preco_m2 > 0 ? `${formatCurrency(imovel.preco_m2)}/m²` : ''}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Título do Anúncio e Morada */}
+                          <div>
+                            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                              {imovel.titulo}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <MapPin size={13} style={{ color: 'var(--text-muted)' }} />
+                              <span>{imovel.localizacao}</span>
+                              {imovel.conservacao && imovel.conservacao !== 'N/A' && (
+                                <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>
+                                  • Estado: <strong>{imovel.conservacao}</strong>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Contacto do Anunciante & Ações do Consultor */}
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '10px',
+                            backgroundColor: 'var(--bg-app)',
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-color)'
+                          }}>
+                            {/* Contactos do Anunciante */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                Contacto do Anunciante:
+                              </span>
+                              {imovel.telefone_anunciante ? (
+                                <a 
+                                  href={`tel:${imovel.telefone_anunciante}`} 
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    triggerPhoneClient(imovel.telefone_anunciante, showToast);
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    color: 'var(--accent-blue)',
+                                    fontWeight: 700,
+                                    fontSize: '0.85rem',
+                                    textDecoration: 'none'
+                                  }}
+                                  title="Ligar para o anunciante"
+                                >
+                                  <Phone size={13} />
+                                  <span>{imovel.telefone_anunciante}</span>
+                                </a>
+                              ) : (
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                  (Ver contacto no portal)
+                                </span>
+                              )}
+                              {imovel.outros_telefones && (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Outros: {imovel.outros_telefones}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Botões de Ação para o Consultor */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              {/* Link Direto para o Portal (Abre a página original) */}
+                              {imovel.url_portal ? (
+                                <a 
+                                  href={imovel.url_portal} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary"
+                                  style={{
+                                    fontSize: '0.8rem',
+                                    padding: '6px 12px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    textDecoration: 'none'
+                                  }}
+                                  title={`Abrir anúncio original no ${imovel.portal}`}
+                                >
+                                  <ExternalLink size={14} />
+                                  <span>Ver Anúncio no {imovel.portal}</span>
+                                </a>
+                              ) : (
+                                <button className="btn btn-secondary" disabled style={{ fontSize: '0.8rem', padding: '6px 12px', opacity: 0.6 }}>
+                                  <ExternalLink size={14} />
+                                  <span>Sem link direto</span>
+                                </button>
+                              )}
+
+                              {/* Adicionar à Carteira Oficial */}
+                              <button 
+                                onClick={() => handlePromoteImportado(imovel)}
+                                className="btn btn-primary"
+                                style={{
+                                  fontSize: '0.8rem',
+                                  padding: '6px 12px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                                title="Transferir os dados deste imóvel para a carteira oficial do CRM"
+                              >
+                                <Plus size={14} />
+                                <span>Adicionar à Carteira Oficial</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Seção de Matchmaking com Compradores */}
+                          <div style={{ marginTop: '0.25rem' }}>
+                            <div 
+                              onClick={() => setExpandedImportMatches(prev => ({ ...prev, [imovel.id]: !prev[imovel.id] }))}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                cursor: 'pointer',
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                backgroundColor: matches.length > 0 ? (bestScore >= 70 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(59, 130, 246, 0.06)') : 'var(--bg-app)',
+                                border: matches.length > 0 ? (bestScore >= 70 ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(59, 130, 246, 0.2)') : '1px solid var(--border-color)',
+                                transition: 'all 0.2s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Sparkles size={16} style={{ color: matches.length > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }} />
+                                <span style={{ fontWeight: 700, fontSize: '0.85rem', color: matches.length > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                                  {matches.length > 0 
+                                    ? `🎯 ${matches.length} Comprador(es) Compatível(is) no CRM (Score máx: ${bestScore}%)` 
+                                    : 'Sem compradores compatíveis de momento'}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {matches.length > 0 && (
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                    {isExpanded ? 'Ocultar' : 'Ver Clientes'}
+                                  </span>
+                                )}
+                                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              </div>
+                            </div>
+
+                            {/* Lista Expansível de Compradores Compatíveis */}
+                            {isExpanded && matches.length > 0 && (
+                              <div style={{
+                                marginTop: '8px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px',
+                                paddingLeft: '10px',
+                                borderLeft: '2px solid var(--accent-blue)'
+                              }}>
+                                {matches.map(({ comprador, score, reasons }) => (
+                                  <div 
+                                    key={comprador.id}
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      flexWrap: 'wrap',
+                                      gap: '10px',
+                                      padding: '10px 14px',
+                                      borderRadius: '8px',
+                                      backgroundColor: 'var(--bg-surface)',
+                                      border: '1px solid var(--border-color)',
+                                      boxShadow: 'var(--shadow-sm)'
+                                    }}
+                                  >
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                                          {comprador.comprador_nome}
+                                        </span>
+                                        <span style={{
+                                          fontWeight: 700,
+                                          fontSize: '0.75rem',
+                                          padding: '2px 8px',
+                                          borderRadius: '10px',
+                                          color: '#fff',
+                                          background: score >= 80 ? 'linear-gradient(135deg, #10b981, #059669)' : score >= 60 ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #64748b, #475569)'
+                                        }}>
+                                          {score}% Match
+                                        </span>
+                                      </div>
+
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                                        Orçamento Máx: <strong>{formatCurrency(comprador.orcamento_maximo)}</strong> | Urgência: {comprador.urgencia}
+                                      </div>
+
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+                                        {reasons.map((r, ri) => (
+                                          <span key={ri} style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                                            ✓ {r}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Contacto do Comprador (SEM link do portal para não passar o cliente à concorrência) */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <a 
+                                        href={`tel:${comprador.comprador_contacto}`}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          triggerPhoneClient(comprador.comprador_contacto, showToast);
+                                        }}
+                                        className="btn btn-secondary"
+                                        style={{ padding: '5px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                                        title="Ligar para o comprador"
+                                      >
+                                        <Phone size={13} />
+                                        <span>Ligar</span>
+                                      </a>
+
+                                      <a 
+                                        href={`https://wa.me/351${comprador.comprador_contacto.replace(/\s+/g, '')}?text=${encodeURIComponent(`Olá ${comprador.comprador_nome}, tenho disponível no mercado uma opção de ${imovel.tipo_imovel} ${imovel.tipologia} em ${imovel.localizacao} a ${formatCurrency(imovel.preco)} com ${score}% de compatibilidade com o que procura. Gostaria de agendar uma visita comigo?`)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn btn-secondary"
+                                        style={{ padding: '5px 10px', fontSize: '0.78rem', color: '#25D366', borderColor: 'rgba(37, 211, 102, 0.3)', backgroundColor: 'rgba(37, 211, 102, 0.05)', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                                        title="Enviar WhatsApp ao Comprador (Mensagem contextual profissional)"
+                                      >
+                                        <MessageCircle size={13} />
+                                        <span>WhatsApp</span>
+                                      </a>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              ) : (
+                /* Estado Vazio quando não há ficheiros importados */
+                <div className="empty-state" style={{ padding: '3.5rem 1.5rem', backgroundColor: 'var(--bg-surface)' }}>
+                  <Compass className="empty-state-icon" style={{ width: '48px', height: '48px', opacity: 0.3 }} />
+                  <div className="empty-state-title" style={{ fontSize: '1.15rem' }}>A Sua Carteira de Importações Está Vazia</div>
+                  <div className="empty-state-desc" style={{ maxWidth: '540px', lineHeight: 1.5 }}>
+                    Exporte a lista de imóveis do <strong>BetterPlace</strong> em formato Excel ou CSV e carregue o ficheiro na caixa acima. O sistema irá identificar automaticamente quem está a anunciar (Particular vs Agência) e calcular o Match com todos os seus compradores.
+                  </div>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => importFileInputRef.current?.click()}
+                    style={{ marginTop: '1.25rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <UploadCloud size={16} />
+                    <span>Selecionar Ficheiro BetterPlace (.xls / .csv)</span>
+                  </button>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* TAB 7: DEFINIÇÕES */}
           {activeMenu === 'definicoes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%', maxWidth: '800px', margin: '0 auto' }}>
 
@@ -3838,6 +4867,10 @@ function App() {
         <button className={`mobile-nav-item ${activeMenu === 'calendario' ? 'active' : ''}`} onClick={() => setActiveMenu('calendario')}>
           <Calendar size={20} />
           <span>Agenda</span>
+        </button>
+        <button className={`mobile-nav-item ${activeMenu === 'importacoes' ? 'active' : ''}`} onClick={() => setActiveMenu('importacoes')}>
+          <FileSpreadsheet size={20} />
+          <span>Radar</span>
         </button>
       </nav>
 

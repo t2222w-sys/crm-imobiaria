@@ -1,4 +1,4 @@
-# Walkthrough: Funcionalidades Implementadas (Subcontas, Dashboard e Segurança)
+# Walkthrough: Funcionalidades Implementadas (Subcontas, Dashboard, Segurança e Layout)
 
 Este documento resume as melhorias e novas funcionalidades desenvolvidas e testadas com sucesso localmente no CRM Imobiliário.
 
@@ -42,6 +42,18 @@ Reforçámos a resiliência da aplicação contra inserções maliciosas ou ataq
 *   **Integração no Fluxo de Dados**:
     *   Aplicada em todas as submissões (`handleAddImovel`, `handleAddComprador`, `handleCriarAgente`, `handleAddAtividade`, `handleUpdateInteracao`).
     *   Adicionados limites `maxLength` a todos os campos de formulário no React.
+
+---
+
+## 🎨 4. Ficha Técnica Compacta, Preço/m² e Controlo Temporal na Tabela de Imóveis (Novo Layout)
+
+Adicionámos os pontos 3 e 4 identificados na análise visual da concorrência à tabela de listagem de Imóveis Desktop:
+*   **Especificações Técnicas com Ícones**:
+    *   Juntámos as características físicas numa coluna chamada "Especificações" com badges ilustradas por emojis para 🛏️ **Tipologia**, 📐 **Área Útil**, 🚗 **Garagem** e 🛗 **Elevador**.
+*   **Cálculo Dinâmico do Valor por m²**:
+    *   A coluna de Preço apresenta agora de forma clara o custo do metro quadrado do imóvel (Ex: `💶 1.527€/m²`), dividindo o preço anunciado pela área útil.
+*   **Data de Criação e Status de Atualização**:
+    *   Nova coluna "Controlo Temporal" que indica a data original em que a ficha foi criada no CRM e calcula o número de dias desde a última atualização (Ex: `🔄 Atualizado hoje` ou `🔄 Atualizado há 5 dias`).
 
 ---
 
