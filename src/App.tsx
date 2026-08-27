@@ -568,14 +568,8 @@ function App() {
 
   const getVisibleVendedores = () => {
     if (!currentUser) return [];
-    let result = [...vendedores];
-    if (currentUser.role === 'Agente') {
-      const principalId = getAgentePrincipalId(currentUser);
-      result = result.filter(v => v.agente_id === principalId);
-    } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
-      result = result.filter(v => v.agente_id === adminSelectedAgenteId);
-    }
-    return result;
+    // A carteira de imóveis da agência é visível para todos os consultores poderem cruzar com os seus clientes
+    return [...vendedores];
   };
 
   const getVisibleMatches = () => {
@@ -879,7 +873,7 @@ function App() {
 
   // Motor de Matchmaking para Imóveis da Carteira de Importações
   const getMatchesForImportado = (imovel: ImovelImportado) => {
-    return compradores.map(comp => {
+    return getVisibleCompradores().map(comp => {
       let score = 0;
       const reasons: string[] = [];
 
