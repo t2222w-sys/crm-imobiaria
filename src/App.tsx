@@ -86,6 +86,7 @@ interface Imovel {
   estado_imovel: string;
   origem_contacto: string;
   agente_id?: string; // Novo
+  criado_por_id?: string | null;
 }
 
 interface Comprador {
@@ -109,6 +110,7 @@ interface Comprador {
   estado_comprador: string;
   origem_contacto: string;
   agente_id?: string; // Novo
+  criado_por_id?: string | null;
 }
 
 interface Match {
@@ -1549,7 +1551,7 @@ function App() {
       observacoes: vObs ? sanitizeInput(vObs, 500) : null,
       estado_imovel: vEstadoImovel,
       origem_contacto: sanitizeInput(vOrigemContacto === 'Outro' ? (vOrigemContactoPersonalizada || 'Outro') : vOrigemContacto, 50),
-      agente_id: vAgenteId || currentUser?.id || null,
+      agente_id: vAgenteId || getAgentePrincipalId(currentUser) || null,
       updated_at: new Date().toISOString()
     };
 
@@ -1566,7 +1568,10 @@ function App() {
       } else {
         const { error } = await supabase
           .from('vendedores_imoveis')
-          .insert([imovelPayload]);
+          .insert([{
+            ...imovelPayload,
+            criado_por_id: currentUser?.id || null
+          }]);
 
         if (error) throw error;
         showToast('Imóvel adicionado!');
@@ -1657,7 +1662,8 @@ function App() {
           .from('compradores_leads')
           .insert([{
             ...leadPayload,
-            agente_id: getAgentePrincipalId(currentUser)
+            agente_id: getAgentePrincipalId(currentUser),
+            criado_por_id: currentUser?.id || null
           }])
           .select();
 
@@ -2148,15 +2154,19 @@ function App() {
   };
 
   const handleDeleteImovel = async (id: string) => {
-    if (currentUser?.parent_agente_id) {
-      showToast('Ação não permitida: Subcontas não podem eliminar registos.', 'error');
+    const imovel = vendedores.find(v => v.id === id);
+    if (!imovel) return;
+
+    if (currentUser?.parent_agente_id && imovel.criado_por_id && imovel.criado_por_id !== currentUser.id) {
+      showToast('Apenas pode eliminar imóveis adicionados por si. Os imóveis da conta principal estão protegidos.', 'error');
       return;
     }
+
     if (!window.confirm('Eliminar este imóvel permanentemente?')) return;
     try {
       const { error } = await supabase.from('vendedores_imoveis').delete().eq('id', id);
       if (error) throw error;
-      showToast('Imóvel eliminado.');
+      showToast('Imóvel eliminado com sucesso.');
       fetchData();
     } catch (err: any) {
       showToast('Erro ao eliminar: ' + err.message, 'error');
@@ -2164,15 +2174,19 @@ function App() {
   };
 
   const handleDeleteComprador = async (id: string) => {
-    if (currentUser?.parent_agente_id) {
-      showToast('Ação não permitida: Subcontas não podem eliminar registos.', 'error');
+    const comprador = compradores.find(c => c.id === id);
+    if (!comprador) return;
+
+    if (currentUser?.parent_agente_id && comprador.criado_por_id && comprador.criado_por_id !== currentUser.id) {
+      showToast('Apenas pode eliminar compradores adicionados por si. Os clientes da conta principal estão protegidos.', 'error');
       return;
     }
+
     if (!window.confirm('Eliminar esta lead de comprador permanentemente?')) return;
     try {
       const { error } = await supabase.from('compradores_leads').delete().eq('id', id);
       if (error) throw error;
-      showToast('Comprador eliminado.');
+      showToast('Comprador eliminado com sucesso.');
       fetchData();
     } catch (err: any) {
       showToast('Erro ao eliminar: ' + err.message, 'error');
@@ -5297,14 +5311,18 @@ function App() {
 
                           <div className="modern-input-group" style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 3', marginTop: '6px' }}>
                             <label><Building2 size={14} style={{ color: 'var(--accent-gold)' }} /> Função / Cargo do Sub-agente</label>
-                            <input 
-                              type="text" 
-                              className="input-text" 
+                            <select 
+                              className="input-select" 
                               value={novoAgenteCargo} 
-                              maxLength={100}
-                              onChange={(e) => setNovoAgenteCargo(e.target.value)} 
-                              placeholder="Ex: Consultor Júnior, Assistente Comercial, Gestor de Leads" 
-                            />
+                              onChange={(e) => setNovoAgenteCargo(e.target.value)}
+                            >
+                              <option value="Sub-agente / Consultor Júnior">💼 Sub-agente / Consultor Júnior</option>
+                              <option value="Administrador de Apoio">🛡️ Administrador de Apoio</option>
+                              <option value="Assistente Comercial">📞 Assistente Comercial</option>
+                              <option value="Gestor de Leads & Prospeção">🎯 Gestor de Leads & Prospeção</option>
+                              <option value="Consultor Associado / Sénior">🏆 Consultor Associado / Sénior</option>
+                              <option value="Angariador Imobiliário">🏡 Angariador Imobiliário</option>
+                            </select>
                           </div>
                         </div>
 
@@ -5543,15 +5561,18 @@ function App() {
 
               <div className="modern-input-group">
                 <label><Building2 size={14} style={{ color: 'var(--accent-gold)' }} /> Função / Cargo do Utilizador</label>
-                <input 
-                  type="text" 
-                  className="input-text" 
+                <select 
+                  className="input-select" 
                   value={editAgenteCargo} 
-                  maxLength={100}
-                  onChange={(e) => setEditAgenteCargo(e.target.value)} 
-                  placeholder="Ex: Consultor Júnior, Assistente Comercial, Gestor de Leads" 
-                  required
-                />
+                  onChange={(e) => setEditAgenteCargo(e.target.value)}
+                >
+                  <option value="Sub-agente / Consultor Júnior">💼 Sub-agente / Consultor Júnior</option>
+                  <option value="Administrador de Apoio">🛡️ Administrador de Apoio</option>
+                  <option value="Assistente Comercial">📞 Assistente Comercial</option>
+                  <option value="Gestor de Leads & Prospeção">🎯 Gestor de Leads & Prospeção</option>
+                  <option value="Consultor Associado / Sénior">🏆 Consultor Associado / Sénior</option>
+                  <option value="Angariador Imobiliário">🏡 Angariador Imobiliário</option>
+                </select>
               </div>
 
               <div className="modern-input-group">
