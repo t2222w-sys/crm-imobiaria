@@ -39,7 +39,8 @@ import {
   CheckCircle2,
   Search,
   UserCheck,
-  Building2
+  Building2,
+  ShieldCheck
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL
@@ -324,6 +325,11 @@ function App() {
   const [novoAgenteSenha, setNovoAgenteSenha] = useState('');
   const [novoAgenteRole, setNovoAgenteRole] = useState<'Admin' | 'Agente'>('Agente');
   const [novoAgenteParentId, setNovoAgenteParentId] = useState<string>('');
+
+  // Alteração de Palavra-passe
+  const [novaSenha, setNovaSenha] = useState('');
+  const [confirmaNovaSenha, setConfirmaNovaSenha] = useState('');
+  const [isUpdatingSenha, setIsUpdatingSenha] = useState(false);
 
   // Navegação
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'importacoes' | 'definicoes'>('kanban');
@@ -1289,6 +1295,53 @@ function App() {
       fetchData(); // recarregar agentes
     } catch (err: any) {
       showToast('Erro ao criar utilizador: ' + err.message, 'error');
+    }
+  };
+
+  const handleAlterarSenha = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const novaTrim = novaSenha.trim();
+    const confirmaTrim = confirmaNovaSenha.trim();
+
+    if (!novaTrim || !confirmaTrim) {
+      showToast('Preencha a nova palavra-passe e a respetiva confirmação.', 'error');
+      return;
+    }
+
+    if (novaTrim.length < 6) {
+      showToast('A palavra-passe deve conter pelo menos 6 caracteres.', 'error');
+      return;
+    }
+
+    if (novaTrim !== confirmaTrim) {
+      showToast('A confirmação não coincide com a nova palavra-passe.', 'error');
+      return;
+    }
+
+    setIsUpdatingSenha(true);
+    try {
+      const { error } = await supabase
+        .from('perfis_agentes')
+        .update({ senha: novaTrim })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+
+      const updatedUser = { ...currentUser, senha: novaTrim };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('crm_current_user', JSON.stringify(updatedUser));
+      setAgentes(prev => prev.map(a => a.id === currentUser.id ? { ...a, senha: novaTrim } : a));
+
+      setNovaSenha('');
+      setConfirmaNovaSenha('');
+      showToast('Palavra-passe alterada com sucesso!', 'success');
+    } catch (err: any) {
+      console.error('Erro ao atualizar palavra-passe:', err);
+      showToast('Erro ao atualizar palavra-passe: ' + (err.message || String(err)), 'error');
+    } finally {
+      setIsUpdatingSenha(false);
     }
   };
 
@@ -5137,6 +5190,54 @@ function App() {
                   )}
                 </div>
               )}
+
+              {/* ALTERAÇÃO DE PALAVRA-PASSE (PARA TODOS OS UTILIZADORES) */}
+              <div className="kanban-card" style={{ padding: '2rem' }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldCheck size={22} style={{ color: 'var(--accent-gold)' }} />
+                  <span>Segurança da Conta & Palavra-passe</span>
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                  Altere a sua palavra-passe de acesso ao sistema. Escolha uma palavra-passe segura com pelo menos 6 caracteres.
+                </p>
+
+                <form onSubmit={handleAlterarSenha} style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr auto', gap: '12px', alignItems: 'end', maxWidth: '680px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nova Palavra-passe</label>
+                    <input 
+                      type="password" 
+                      className="input-text" 
+                      value={novaSenha} 
+                      maxLength={50}
+                      onChange={(e) => setNovaSenha(e.target.value)} 
+                      placeholder="Mínimo 6 caracteres" 
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Confirmar Nova Palavra-passe</label>
+                    <input 
+                      type="password" 
+                      className="input-text" 
+                      value={confirmaNovaSenha} 
+                      maxLength={50}
+                      onChange={(e) => setConfirmaNovaSenha(e.target.value)} 
+                      placeholder="Repita a nova palavra-passe" 
+                      required
+                    />
+                  </div>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary" 
+                    style={{ height: '40px', padding: '0 18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    disabled={isUpdatingSenha}
+                  >
+                    <Check size={16} />
+                    <span>{isUpdatingSenha ? 'A guardar...' : 'Guardar Senha'}</span>
+                  </button>
+                </form>
+              </div>
+
             </div>
           )}
 
