@@ -1097,24 +1097,46 @@ function App() {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setIsLoggingIn(true);
     
     const emailLower = loginEmail.trim().toLowerCase();
-    const user = agentes.find(a => a.email.toLowerCase() === emailLower && a.senha === loginSenha);
-    
-    if (user) {
-      localStorage.setItem('crm_current_user', JSON.stringify(user));
-      setCurrentUser(user);
-      showToast(`Bem-vindo, ${user.nome}!`, 'success');
-      setLoginEmail('');
-      setLoginSenha('');
-    } else {
-      setLoginError('E-mail ou password incorretos. Por favor, tente novamente.');
+    const senhaTrim = loginSenha.trim();
+
+    try {
+      // 1. Procurar em memória
+      let user = agentes.find(a => a.email.toLowerCase() === emailLower && a.senha === senhaTrim);
+      
+      // 2. Se ainda não carregou ou não encontrou, verificar diretamente na base de dados Supabase
+      if (!user) {
+        const { data } = await supabase
+          .from('perfis_agentes')
+          .select('*')
+          .ilike('email', emailLower)
+          .maybeSingle();
+
+        if (data && data.senha === senhaTrim) {
+          user = data;
+        }
+      }
+
+      if (user) {
+        localStorage.setItem('crm_current_user', JSON.stringify(user));
+        setCurrentUser(user);
+        showToast(`Bem-vindo, ${user.nome}!`, 'success');
+        setLoginEmail('');
+        setLoginSenha('');
+      } else {
+        setLoginError('E-mail ou password incorretos. Por favor, tente novamente.');
+      }
+    } catch (err: any) {
+      console.error('Erro no login:', err);
+      setLoginError('Erro ao validar credenciais: ' + (err.message || String(err)));
+    } finally {
+      setIsLoggingIn(false);
     }
-    setIsLoggingIn(false);
   };
 
   const handleLogout = async () => {
