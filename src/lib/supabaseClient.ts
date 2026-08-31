@@ -12,11 +12,15 @@ const cleanEnvVar = (val: string) => {
   return s.trim();
 };
 
-const DEFAULT_SUPABASE_URL = 'https://mrsbnhcnwmnciuzalvtt.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2JuaGNud21uY2l1emFsdnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NDk3MzIsImV4cCI6MjEwMzIyNTczMn0.6mM2NTnIFCO6IF7DQ5dvtza5XWR79Tf5iBXAxzjsUxw';
+const OFFICIAL_SUPABASE_URL = 'https://mrsbnhcnwmnciuzalvtt.supabase.co';
+const OFFICIAL_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yc2JuaGNud21uY2l1emFsdnR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NDk3MzIsImV4cCI6MjEwMzIyNTczMn0.6mM2NTnIFCO6IF7DQ5dvtza5XWR79Tf5iBXAxzjsUxw';
 
-const supabaseUrl = cleanEnvVar(import.meta.env?.VITE_SUPABASE_URL || '') || DEFAULT_SUPABASE_URL;
-const supabaseAnonKey = cleanEnvVar(import.meta.env?.VITE_SUPABASE_ANON_KEY || '') || DEFAULT_SUPABASE_ANON_KEY;
+const rawUrl = cleanEnvVar(import.meta.env?.VITE_SUPABASE_URL || '');
+const rawKey = cleanEnvVar(import.meta.env?.VITE_SUPABASE_ANON_KEY || '');
+
+// Se a variável de ambiente for vazia ou for da base de dados antiga, usa diretamente a nova oficial!
+export const supabaseUrl = (!rawUrl || rawUrl.includes('akfykaystwyqzrsxdfjh')) ? OFFICIAL_SUPABASE_URL : rawUrl;
+export const supabaseAnonKey = (!rawKey || rawKey.includes('akfykaystwyqzrsxdfjh') || supabaseUrl === OFFICIAL_SUPABASE_URL) ? OFFICIAL_SUPABASE_ANON_KEY : rawKey;
 
 // Verifica se as chaves estão devidamente configuradas
 export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;
