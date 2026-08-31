@@ -55,6 +55,7 @@ interface Agente {
   email: string;
   senha?: string;
   role: 'Admin' | 'Agente';
+  cargo?: string | null;
   created_at: string;
   parent_agente_id?: string | null; // Novo
 }
@@ -330,6 +331,21 @@ function App() {
   const [novoAgenteSenha, setNovoAgenteSenha] = useState('');
   const [novoAgenteRole, setNovoAgenteRole] = useState<'Admin' | 'Agente'>('Agente');
   const [novoAgenteParentId, setNovoAgenteParentId] = useState<string>('');
+  const [novoAgenteCargo, setNovoAgenteCargo] = useState<string>('Sub-agente / Consultor Júnior');
+
+  // Edição e Eliminação de Agentes / Subcontas
+  const [editingAgente, setEditingAgente] = useState<Agente | null>(null);
+  const [editAgenteNome, setEditAgenteNome] = useState('');
+  const [editAgenteEmail, setEditAgenteEmail] = useState('');
+  const [editAgenteSenha, setEditAgenteSenha] = useState('');
+  const [editAgenteCargo, setEditAgenteCargo] = useState('');
+  const [editAgenteRole, setEditAgenteRole] = useState<'Admin' | 'Agente'>('Agente');
+  const [isSavingAgenteEdit, setIsSavingAgenteEdit] = useState(false);
+
+  // Modal de Eliminação Segura com Frase de Confirmação
+  const [deletingAgente, setDeletingAgente] = useState<Agente | null>(null);
+  const [confirmDeletePhrase, setConfirmDeletePhrase] = useState('');
+  const [isDeletingAgente, setIsDeletingAgente] = useState(false);
 
   // Alteração de Palavra-passe
   const [novaSenha, setNovaSenha] = useState('');
@@ -1282,6 +1298,7 @@ function App() {
         nome: sanitizeInput(novoAgenteNome, 100),
         email: sanitizeInput(novoAgenteEmail, 100).toLowerCase(),
         senha: sanitizeInput(novoAgenteSenha, 50),
+        cargo: sanitizeInput(novoAgenteCargo, 100) || (currentUser?.role === 'Admin' ? (novoAgenteRole === 'Admin' ? 'Administrador' : 'Agente Principal') : 'Sub-agente / Consultor Júnior'),
         role: currentUser?.role === 'Admin' ? novoAgenteRole : 'Agente',
         parent_agente_id: currentUser?.role === 'Admin' ? (novoAgenteRole === 'Admin' ? null : (novoAgenteParentId || null)) : currentUser?.id
       };
@@ -1296,11 +1313,93 @@ function App() {
       setNovoAgenteNome('');
       setNovoAgenteEmail('');
       setNovoAgenteSenha('');
+      setNovoAgenteCargo('Sub-agente / Consultor Júnior');
       setNovoAgenteRole('Agente');
       setNovoAgenteParentId('');
       fetchData(); // recarregar agentes
     } catch (err: any) {
       showToast('Erro ao criar utilizador: ' + err.message, 'error');
+    }
+  };
+
+  const handleOpenEditAgente = (agente: Agente) => {
+    setEditingAgente(agente);
+    setEditAgenteNome(agente.nome || '');
+    setEditAgenteEmail(agente.email || '');
+    setEditAgenteSenha(agente.senha || '');
+    setEditAgenteCargo(agente.cargo || (agente.parent_agente_id ? 'Sub-agente / Consultor Júnior' : (agente.role === 'Admin' ? 'Administrador' : 'Agente Principal')));
+    setEditAgenteRole(agente.role || 'Agente');
+  };
+
+  const handleSaveEditAgente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAgente) return;
+    if (!editAgenteNome.trim() || !editAgenteEmail.trim() || !editAgenteSenha.trim()) {
+      showToast('Preencha o nome, e-mail e palavra-passe.', 'error');
+      return;
+    }
+
+    setIsSavingAgenteEdit(true);
+    try {
+      const payload: any = {
+        nome: sanitizeInput(editAgenteNome, 100),
+        email: sanitizeInput(editAgenteEmail, 100).toLowerCase(),
+        senha: sanitizeInput(editAgenteSenha, 50),
+        cargo: sanitizeInput(editAgenteCargo, 100) || 'Sub-agente',
+      };
+      if (currentUser?.role === 'Admin') {
+        payload.role = editAgenteRole;
+      }
+
+      const { error } = await supabase
+        .from('perfis_agentes')
+        .update(payload)
+        .eq('id', editingAgente.id);
+
+      if (error) throw error;
+
+      showToast(`Perfil de ${editAgenteNome} atualizado com sucesso!`, 'success');
+      setEditingAgente(null);
+      fetchData(); // recarregar agentes
+    } catch (err: any) {
+      console.error('Erro ao atualizar agente:', err);
+      showToast('Erro ao atualizar utilizador: ' + (err.message || String(err)), 'error');
+    } finally {
+      setIsSavingAgenteEdit(false);
+    }
+  };
+
+  const handleOpenDeleteAgente = (agente: Agente) => {
+    setDeletingAgente(agente);
+    setConfirmDeletePhrase('');
+  };
+
+  const handleConfirmDeleteAgente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deletingAgente) return;
+    if (confirmDeletePhrase.trim().toUpperCase() !== 'ELIMINAR') {
+      showToast('Escreva a palavra ELIMINAR para confirmar.', 'error');
+      return;
+    }
+
+    setIsDeletingAgente(true);
+    try {
+      const { error } = await supabase
+        .from('perfis_agentes')
+        .delete()
+        .eq('id', deletingAgente.id);
+
+      if (error) throw error;
+
+      showToast(`Subconta de ${deletingAgente.nome} eliminada com sucesso.`, 'success');
+      setDeletingAgente(null);
+      setConfirmDeletePhrase('');
+      fetchData();
+    } catch (err: any) {
+      console.error('Erro ao eliminar agente:', err);
+      showToast('Erro ao eliminar subconta: ' + (err.message || String(err)), 'error');
+    } finally {
+      setIsDeletingAgente(false);
     }
   };
 
@@ -5062,8 +5161,9 @@ function App() {
                         <tr>
                           <th>Nome</th>
                           <th>E-mail</th>
-                          <th>Role</th>
+                          <th>Função / Role</th>
                           <th>Senha</th>
+                          <th style={{ textAlign: 'center' }}>Ações</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5082,10 +5182,32 @@ function App() {
                                   color: a.role === 'Admin' ? 'var(--urgency-alta)' : 'var(--accent-blue)',
                                   border: '1px solid transparent'
                                 }}>
-                                  {a.role === 'Admin' ? '🛡️ Administrador' : (a.parent_agente_id ? '👥 Sub-agente' : '💼 Agente Principal')}
+                                  {a.cargo || (a.role === 'Admin' ? '🛡️ Administrador' : (a.parent_agente_id ? '👥 Sub-agente' : '💼 Agente Principal'))}
                                 </span>
                               </td>
                               <td><code style={{ fontSize: '0.8rem' }}>{a.senha}</code></td>
+                              <td style={{ textAlign: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                  <button 
+                                    className="btn-icon" 
+                                    onClick={() => handleOpenEditAgente(a)} 
+                                    title="Editar utilizador / função"
+                                    style={{ color: 'var(--accent-gold)' }}
+                                  >
+                                    <Edit2 size={16} />
+                                  </button>
+                                  {a.id !== currentUser?.id && (
+                                    <button 
+                                      className="btn-icon" 
+                                      onClick={() => handleOpenDeleteAgente(a)} 
+                                      title="Eliminar utilizador"
+                                      style={{ color: 'var(--urgency-alta)' }}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -5108,7 +5230,7 @@ function App() {
                       <div>
                         <strong>Função:</strong> 
                         <span className="badge" style={{ marginLeft: '6px', backgroundColor: 'var(--accent-blue-bg)', color: 'var(--accent-blue)', border: '1px solid transparent' }}>
-                          {currentUser?.parent_agente_id ? '👥 Sub-agente' : '💼 Agente Principal'}
+                          {currentUser?.cargo || (currentUser?.parent_agente_id ? '👥 Sub-agente' : '💼 Agente Principal')}
                         </span>
                       </div>
                     </div>
@@ -5172,6 +5294,18 @@ function App() {
                               />
                             </div>
                           </div>
+
+                          <div className="modern-input-group" style={{ gridColumn: window.innerWidth <= 600 ? 'span 1' : 'span 3', marginTop: '6px' }}>
+                            <label><Building2 size={14} style={{ color: 'var(--accent-gold)' }} /> Função / Cargo do Sub-agente</label>
+                            <input 
+                              type="text" 
+                              className="input-text" 
+                              value={novoAgenteCargo} 
+                              maxLength={100}
+                              onChange={(e) => setNovoAgenteCargo(e.target.value)} 
+                              placeholder="Ex: Consultor Júnior, Assistente Comercial, Gestor de Leads" 
+                            />
+                          </div>
                         </div>
 
                         <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
@@ -5193,8 +5327,9 @@ function App() {
                             <tr>
                               <th>Nome</th>
                               <th>E-mail</th>
-                              <th>Função</th>
+                              <th>Função / Cargo</th>
                               <th>Senha de Acesso</th>
+                              <th style={{ textAlign: 'center' }}>Ações</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -5208,15 +5343,35 @@ function App() {
                                     color: 'var(--accent-blue)',
                                     border: '1px solid transparent'
                                   }}>
-                                    💼 Sub-agente
+                                    💼 {a.cargo || 'Sub-agente'}
                                   </span>
                                 </td>
                                 <td><code style={{ fontSize: '0.8rem' }}>{a.senha}</code></td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                    <button 
+                                      className="btn-icon" 
+                                      onClick={() => handleOpenEditAgente(a)} 
+                                      title="Atualizar função e dados"
+                                      style={{ color: 'var(--accent-gold)' }}
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                    <button 
+                                      className="btn-icon" 
+                                      onClick={() => handleOpenDeleteAgente(a)} 
+                                      title="Eliminar subconta"
+                                      style={{ color: 'var(--urgency-alta)' }}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                             {agentes.filter(a => a.parent_agente_id === currentUser?.id).length === 0 && (
                               <tr>
-                                <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
+                                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem' }}>
                                   Não tens nenhuma subconta associada. Introduz os dados acima para criares a tua equipa!
                                 </td>
                               </tr>
@@ -5338,6 +5493,179 @@ function App() {
           <span>Radar</span>
         </button>
       </nav>
+
+      {/* MODAL DE EDIÇÃO DE SUB-AGENTE / UTILIZADOR */}
+      {editingAgente && (
+        <div className="modal-overlay" onClick={() => setEditingAgente(null)}>
+          <div className="modal-content-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit2 size={20} style={{ color: 'var(--accent-gold)' }} />
+                <span>Atualizar Subconta / Utilizador</span>
+              </h3>
+              <button className="modal-close-btn" onClick={() => setEditingAgente(null)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditAgente} className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '1.5rem' }}>
+              <div className="modern-input-group">
+                <label><User size={14} style={{ color: 'var(--accent-gold)' }} /> Nome Completo</label>
+                <div className="modern-input-icon-wrap">
+                  <User size={16} className="input-icon-left" />
+                  <input 
+                    type="text" 
+                    className="input-text" 
+                    value={editAgenteNome} 
+                    maxLength={100}
+                    onChange={(e) => setEditAgenteNome(e.target.value)} 
+                    placeholder="Nome do agente" 
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="modern-input-group">
+                <label><Mail size={14} style={{ color: 'var(--accent-gold)' }} /> E-mail (Conta Google / Acesso)*</label>
+                <div className="modern-input-icon-wrap">
+                  <Mail size={16} className="input-icon-left" />
+                  <input 
+                    type="email" 
+                    className="input-text" 
+                    value={editAgenteEmail} 
+                    maxLength={100}
+                    onChange={(e) => setEditAgenteEmail(e.target.value)} 
+                    placeholder="ex: agente@gmail.com" 
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="modern-input-group">
+                <label><Building2 size={14} style={{ color: 'var(--accent-gold)' }} /> Função / Cargo do Utilizador</label>
+                <input 
+                  type="text" 
+                  className="input-text" 
+                  value={editAgenteCargo} 
+                  maxLength={100}
+                  onChange={(e) => setEditAgenteCargo(e.target.value)} 
+                  placeholder="Ex: Consultor Júnior, Assistente Comercial, Gestor de Leads" 
+                  required
+                />
+              </div>
+
+              <div className="modern-input-group">
+                <label><Key size={14} style={{ color: 'var(--accent-gold)' }} /> Palavra-passe de Acesso</label>
+                <div className="modern-input-icon-wrap">
+                  <Key size={16} className="input-icon-left" />
+                  <input 
+                    type="text" 
+                    className="input-text" 
+                    value={editAgenteSenha} 
+                    maxLength={50}
+                    onChange={(e) => setEditAgenteSenha(e.target.value)} 
+                    placeholder="Palavra-passe" 
+                    required
+                  />
+                </div>
+              </div>
+
+              {currentUser?.role === 'Admin' && (
+                <div className="modern-input-group">
+                  <label>Nível de Acesso (Role)</label>
+                  <select 
+                    className="input-select" 
+                    value={editAgenteRole} 
+                    onChange={(e) => setEditAgenteRole(e.target.value as 'Admin' | 'Agente')}
+                  >
+                    <option value="Agente">Agente / Consultor</option>
+                    <option value="Admin">Administrador</option>
+                  </select>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '1rem' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingAgente(null)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={isSavingAgenteEdit}>
+                  <Check size={16} />
+                  <span>{isSavingAgenteEdit ? 'A guardar...' : 'Guardar Alterações'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE ELIMINAÇÃO SEGURA */}
+      {deletingAgente && (
+        <div className="modal-overlay" onClick={() => setDeletingAgente(null)}>
+          <div className="modal-content-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', borderTop: '4px solid var(--urgency-alta)' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--urgency-alta)' }}>
+                <AlertTriangle size={22} />
+                <span>Eliminar Subconta</span>
+              </h3>
+              <button className="modal-close-btn" onClick={() => setDeletingAgente(null)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ fontSize: '0.92rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
+                Tem a certeza de que pretende eliminar a subconta de <strong>{deletingAgente.nome}</strong> (<code>{deletingAgente.email}</code>)?
+              </p>
+
+              <div style={{ padding: '12px 14px', backgroundColor: 'var(--urgency-alta-bg)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', fontSize: '0.82rem', color: 'var(--urgency-alta)', lineHeight: 1.4 }}>
+                ⚠️ <strong>Atenção:</strong> O utilizador perderá o acesso imediato à plataforma. Os imóveis e leads da equipa permanecerão seguros na conta do Agente Principal.
+              </div>
+
+              <form onSubmit={handleConfirmDeleteAgente} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '6px' }}>
+                <div className="modern-input-group">
+                  <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                    Para confirmar, escreva <strong style={{ color: 'var(--urgency-alta)', letterSpacing: '0.05em' }}>ELIMINAR</strong> no campo abaixo:
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-text" 
+                    value={confirmDeletePhrase} 
+                    onChange={(e) => setConfirmDeletePhrase(e.target.value)} 
+                    placeholder="Escreva ELIMINAR" 
+                    autoFocus
+                    required
+                    style={{ borderColor: confirmDeletePhrase.trim().toUpperCase() === 'ELIMINAR' ? 'var(--urgency-alta)' : undefined }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setDeletingAgente(null)}>
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn" 
+                    style={{ 
+                      backgroundColor: confirmDeletePhrase.trim().toUpperCase() === 'ELIMINAR' ? 'var(--urgency-alta)' : 'var(--text-muted)', 
+                      color: '#fff',
+                      opacity: confirmDeletePhrase.trim().toUpperCase() === 'ELIMINAR' ? 1 : 0.6,
+                      cursor: confirmDeletePhrase.trim().toUpperCase() === 'ELIMINAR' ? 'pointer' : 'not-allowed',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 700
+                    }}
+                    disabled={confirmDeletePhrase.trim().toUpperCase() !== 'ELIMINAR' || isDeletingAgente}
+                  >
+                    <Trash2 size={16} />
+                    <span>{isDeletingAgente ? 'A eliminar...' : 'Confirmar Eliminação'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: ADICIONAR / EDITAR IMÓVEL */}
       {isImovelModalOpen && (
