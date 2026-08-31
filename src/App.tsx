@@ -40,7 +40,12 @@ import {
   Search,
   UserCheck,
   Building2,
-  ShieldCheck
+  ShieldCheck,
+  User,
+  Key,
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 // Interfaces baseadas no esquema SQL
@@ -329,6 +334,7 @@ function App() {
   // Alteração de Palavra-passe
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmaNovaSenha, setConfirmaNovaSenha] = useState('');
+  const [showNovaSenha, setShowNovaSenha] = useState(false);
   const [isUpdatingSenha, setIsUpdatingSenha] = useState(false);
 
   // Navegação
@@ -4956,80 +4962,96 @@ function App() {
                   </h2>
 
                   {/* Formulário para criar novo utilizador */}
-                  <form onSubmit={handleCriarAgente} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '2rem', padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nome Completo</label>
-                      <input 
-                        type="text" 
-                        className="input-text" 
-                        value={novoAgenteNome} 
-                        maxLength={100}
-                        onChange={(e) => setNovoAgenteNome(e.target.value)} 
-                        placeholder="Nome do agente" 
-                        required
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail (Conta Google / Acesso)*</label>
-                      <input 
-                        type="email" 
-                        className="input-text" 
-                        value={novoAgenteEmail} 
-                        maxLength={100}
-                        onChange={(e) => setNovoAgenteEmail(e.target.value)} 
-                        placeholder="ex: tomas@gmail.com" 
-                        required
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Palavra-passe</label>
-                      <input 
-                        type="password" 
-                        className="input-text" 
-                        value={novoAgenteSenha} 
-                        maxLength={50}
-                        onChange={(e) => setNovoAgenteSenha(e.target.value)} 
-                        placeholder="Senha" 
-                        required
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 2' : 'span 1', marginTop: '10px' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nível de Acesso (Role)</label>
-                      <select 
-                        className="input-select" 
-                        value={novoAgenteRole} 
-                        onChange={(e) => setNovoAgenteRole(e.target.value as 'Admin' | 'Agente')}
-                        style={{ margin: 0 }}
-                      >
-                        <option value="Agente">Agente / Consultor</option>
-                        <option value="Admin">Administrador</option>
-                      </select>
-                    </div>
+                  <form onSubmit={handleCriarAgente} className="modern-form-box" style={{ marginBottom: '2rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1.2fr 1fr', gap: '14px', alignItems: 'end' }}>
+                      <div className="modern-input-group">
+                        <label><User size={14} style={{ color: 'var(--accent-gold)' }} /> Nome Completo</label>
+                        <div className="modern-input-icon-wrap">
+                          <User size={16} className="input-icon-left" />
+                          <input 
+                            type="text" 
+                            className="input-text" 
+                            value={novoAgenteNome} 
+                            maxLength={100}
+                            onChange={(e) => setNovoAgenteNome(e.target.value)} 
+                            placeholder="Nome do agente" 
+                            required
+                          />
+                        </div>
+                      </div>
 
-                    {novoAgenteRole === 'Agente' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 2' : 'span 1', marginTop: '10px' }}>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Equipa / Agente Principal</label>
+                      <div className="modern-input-group">
+                        <label><Mail size={14} style={{ color: 'var(--accent-gold)' }} /> E-mail (Conta Google / Acesso)*</label>
+                        <div className="modern-input-icon-wrap">
+                          <Mail size={16} className="input-icon-left" />
+                          <input 
+                            type="email" 
+                            className="input-text" 
+                            value={novoAgenteEmail} 
+                            maxLength={100}
+                            onChange={(e) => setNovoAgenteEmail(e.target.value)} 
+                            placeholder="ex: tomas@gmail.com" 
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="modern-input-group">
+                        <label><Key size={14} style={{ color: 'var(--accent-gold)' }} /> Palavra-passe</label>
+                        <div className="modern-input-icon-wrap">
+                          <Key size={16} className="input-icon-left" />
+                          <input 
+                            type="password" 
+                            className="input-text" 
+                            value={novoAgenteSenha} 
+                            maxLength={50}
+                            onChange={(e) => setNovoAgenteSenha(e.target.value)} 
+                            placeholder="Senha" 
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="modern-input-group" style={{ marginTop: '6px' }}>
+                        <label>Nível de Acesso (Role)</label>
                         <select 
                           className="input-select" 
-                          value={novoAgenteParentId} 
-                          onChange={(e) => setNovoAgenteParentId(e.target.value)}
+                          value={novoAgenteRole} 
+                          onChange={(e) => setNovoAgenteRole(e.target.value as 'Admin' | 'Agente')}
                           style={{ margin: 0 }}
                         >
-                          <option value="">Nenhum (Agente Principal / Independente)</option>
-                          {agentes.filter(a => !a.parent_agente_id && a.role !== 'Admin').map(a => (
-                            <option key={a.id} value={a.id}>Equipa de: {a.nome}</option>
-                          ))}
+                          <option value="Agente">Agente / Consultor</option>
+                          <option value="Admin">Administrador</option>
                         </select>
                       </div>
-                    )}
 
-                    <button 
-                      type="submit" 
-                      className="btn btn-primary" 
-                      style={{ height: '40px', justifyContent: 'center', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 2' }}
-                    >
-                      <Plus size={16} /> Adicionar Novo Utilizador
-                    </button>
+                      {novoAgenteRole === 'Agente' && (
+                        <div className="modern-input-group" style={{ marginTop: '6px' }}>
+                          <label>Equipa / Agente Principal</label>
+                          <select 
+                            className="input-select" 
+                            value={novoAgenteParentId} 
+                            onChange={(e) => setNovoAgenteParentId(e.target.value)}
+                            style={{ margin: 0 }}
+                          >
+                            <option value="">Nenhum (Agente Principal / Independente)</option>
+                            {agentes.filter(a => !a.parent_agente_id && a.role !== 'Admin').map(a => (
+                              <option key={a.id} value={a.id}>Equipa de: {a.nome}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button 
+                        type="submit" 
+                        className="btn btn-primary" 
+                        style={{ height: '42px', padding: '0 20px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <Plus size={16} /> Adicionar Novo Utilizador
+                      </button>
+                    </div>
                   </form>
 
                   {/* Lista de Utilizadores Atuais */}
@@ -5101,50 +5123,66 @@ function App() {
                       </h2>
 
                       {/* Formulário para criar nova subconta */}
-                      <form onSubmit={handleCriarAgente} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '2rem', padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-app)' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nome do Sub-agente</label>
-                          <input 
-                            type="text" 
-                            className="input-text" 
-                            value={novoAgenteNome} 
-                            maxLength={100}
-                            onChange={(e) => setNovoAgenteNome(e.target.value)} 
-                            placeholder="Ex: João Júnior" 
-                            required
-                          />
+                      <form onSubmit={handleCriarAgente} className="modern-form-box" style={{ marginBottom: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1.2fr 1fr', gap: '14px', alignItems: 'end' }}>
+                          <div className="modern-input-group">
+                            <label><User size={14} style={{ color: 'var(--accent-gold)' }} /> Nome do Sub-agente</label>
+                            <div className="modern-input-icon-wrap">
+                              <User size={16} className="input-icon-left" />
+                              <input 
+                                type="text" 
+                                className="input-text" 
+                                value={novoAgenteNome} 
+                                maxLength={100}
+                                onChange={(e) => setNovoAgenteNome(e.target.value)} 
+                                placeholder="Ex: João Júnior" 
+                                required
+                              />
+                            </div>
+                          </div>
+
+                          <div className="modern-input-group">
+                            <label><Mail size={14} style={{ color: 'var(--accent-gold)' }} /> E-mail (Conta Google)*</label>
+                            <div className="modern-input-icon-wrap">
+                              <Mail size={16} className="input-icon-left" />
+                              <input 
+                                type="email" 
+                                className="input-text" 
+                                value={novoAgenteEmail} 
+                                maxLength={100}
+                                onChange={(e) => setNovoAgenteEmail(e.target.value)} 
+                                placeholder="ex: assistente@gmail.com" 
+                                required
+                              />
+                            </div>
+                          </div>
+
+                          <div className="modern-input-group">
+                            <label><Key size={14} style={{ color: 'var(--accent-gold)' }} /> Palavra-passe</label>
+                            <div className="modern-input-icon-wrap">
+                              <Key size={16} className="input-icon-left" />
+                              <input 
+                                type="password" 
+                                className="input-text" 
+                                value={novoAgenteSenha} 
+                                maxLength={50}
+                                onChange={(e) => setNovoAgenteSenha(e.target.value)} 
+                                placeholder="Senha inicial" 
+                                required
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail da Subconta (Conta Google)*</label>
-                          <input 
-                            type="email" 
-                            className="input-text" 
-                            value={novoAgenteEmail} 
-                            maxLength={100}
-                            onChange={(e) => setNovoAgenteEmail(e.target.value)} 
-                            placeholder="ex: assistente@gmail.com" 
-                            required
-                          />
+
+                        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                          <button 
+                            type="submit" 
+                            className="btn btn-primary" 
+                            style={{ height: '42px', padding: '0 20px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                          >
+                            <Plus size={16} /> Criar Subconta
+                          </button>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Palavra-passe</label>
-                          <input 
-                            type="password" 
-                            className="input-text" 
-                            value={novoAgenteSenha} 
-                            maxLength={50}
-                            onChange={(e) => setNovoAgenteSenha(e.target.value)} 
-                            placeholder="Senha" 
-                            required
-                          />
-                        </div>
-                        <button 
-                          type="submit" 
-                          className="btn btn-primary" 
-                          style={{ height: '40px', justifyContent: 'center', gridColumn: 'span 3', marginTop: '10px' }}
-                        >
-                          <Plus size={16} /> Criar Subconta
-                        </button>
                       </form>
 
                       {/* Lista de Subcontas do Agente Ativo */}
@@ -5193,48 +5231,67 @@ function App() {
 
               {/* ALTERAÇÃO DE PALAVRA-PASSE (PARA TODOS OS UTILIZADORES) */}
               <div className="kanban-card" style={{ padding: '2rem' }}>
-                <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <ShieldCheck size={22} style={{ color: 'var(--accent-gold)' }} />
                   <span>Segurança da Conta & Palavra-passe</span>
                 </h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-                  Altere a sua palavra-passe de acesso ao sistema. Escolha uma palavra-passe segura com pelo menos 6 caracteres.
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+                  Altere a sua palavra-passe de acesso ao sistema. Escolha uma combinação segura com no mínimo 6 caracteres.
                 </p>
 
-                <form onSubmit={handleAlterarSenha} style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr auto', gap: '12px', alignItems: 'end', maxWidth: '680px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Nova Palavra-passe</label>
-                    <input 
-                      type="password" 
-                      className="input-text" 
-                      value={novaSenha} 
-                      maxLength={50}
-                      onChange={(e) => setNovaSenha(e.target.value)} 
-                      placeholder="Mínimo 6 caracteres" 
-                      required
-                    />
+                <form onSubmit={handleAlterarSenha} className="modern-form-box">
+                  <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth <= 600 ? '1fr' : '1fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+                    <div className="modern-input-group">
+                      <label><Lock size={14} style={{ color: 'var(--accent-gold)' }} /> Nova Palavra-passe</label>
+                      <div className="modern-input-icon-wrap">
+                        <Lock size={16} className="input-icon-left" />
+                        <input 
+                          type={showNovaSenha ? 'text' : 'password'} 
+                          className="input-text" 
+                          value={novaSenha} 
+                          maxLength={50}
+                          onChange={(e) => setNovaSenha(e.target.value)} 
+                          placeholder="Mínimo 6 caracteres" 
+                          required
+                          style={{ paddingRight: '40px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNovaSenha(!showNovaSenha)}
+                          style={{ position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                          title={showNovaSenha ? 'Ocultar palavra-passe' : 'Mostrar palavra-passe'}
+                        >
+                          {showNovaSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="modern-input-group">
+                      <label><ShieldCheck size={14} style={{ color: 'var(--accent-gold)' }} /> Confirmar Nova Palavra-passe</label>
+                      <div className="modern-input-icon-wrap">
+                        <Lock size={16} className="input-icon-left" />
+                        <input 
+                          type={showNovaSenha ? 'text' : 'password'} 
+                          className="input-text" 
+                          value={confirmaNovaSenha} 
+                          maxLength={50}
+                          onChange={(e) => setConfirmaNovaSenha(e.target.value)} 
+                          placeholder="Repita a nova palavra-passe" 
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary" 
+                      style={{ height: '42px', padding: '0 22px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', whiteSpace: 'nowrap' }}
+                      disabled={isUpdatingSenha}
+                    >
+                      <Check size={16} />
+                      <span>{isUpdatingSenha ? 'A guardar...' : 'Guardar Senha'}</span>
+                    </button>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Confirmar Nova Palavra-passe</label>
-                    <input 
-                      type="password" 
-                      className="input-text" 
-                      value={confirmaNovaSenha} 
-                      maxLength={50}
-                      onChange={(e) => setConfirmaNovaSenha(e.target.value)} 
-                      placeholder="Repita a nova palavra-passe" 
-                      required
-                    />
-                  </div>
-                  <button 
-                    type="submit" 
-                    className="btn btn-primary" 
-                    style={{ height: '40px', padding: '0 18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                    disabled={isUpdatingSenha}
-                  >
-                    <Check size={16} />
-                    <span>{isUpdatingSenha ? 'A guardar...' : 'Guardar Senha'}</span>
-                  </button>
                 </form>
               </div>
 
