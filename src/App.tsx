@@ -323,20 +323,14 @@ function App() {
   const [novoAgenteEmail, setNovoAgenteEmail] = useState('');
   const [novoAgenteSenha, setNovoAgenteSenha] = useState('');
   const [novoAgenteRole, setNovoAgenteRole] = useState<'Admin' | 'Agente'>('Agente');
+  const [novoAgenteParentId, setNovoAgenteParentId] = useState<string>('');
 
   // Navegação
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'kanban' | 'imoveis' | 'compradores' | 'calendario' | 'importacoes' | 'definicoes'>('kanban');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Estados da Carteira de Importações (Radar BetterPlace)
-  const [imoveisImportados, setImoveisImportados] = useState<ImovelImportado[]>(() => {
-    const saved = localStorage.getItem('crm_imoveis_importados_radar');
-    try {
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [imoveisImportados, setImoveisImportados] = useState<ImovelImportado[]>([]);
   const [isImportingFile, setIsImportingFile] = useState(false);
   const [fImportPesquisa, setFImportPesquisa] = useState('');
   const [fImportPortal, setFImportPortal] = useState<string>('Todos');
@@ -384,6 +378,7 @@ function App() {
   const [fImovelPrecoMax, setFImovelPrecoMax] = useState<number>(1000000);
   const [fImovelEstado, setFImovelEstado] = useState<string>('Todos');
   const [fImovelOrigem, setFImovelOrigem] = useState<string>('Todos');
+  const [fImovelAgenteId, setFImovelAgenteId] = useState<string>('Todos');
   const [sortImoveisBy, setSortImoveisBy] = useState<string>('data-desc');
 
   // Filtros Compradores
@@ -425,6 +420,7 @@ function App() {
   const [vEstadoImovel, setVEstadoImovel] = useState('Ativo');
   const [vOrigemContacto, setVOrigemContacto] = useState('Outro');
   const [vOrigemContactoPersonalizada, setVOrigemContactoPersonalizada] = useState('');
+  const [vAgenteId, setVAgenteId] = useState('');
 
   // Lead / Comprador
   const [cNome, setCNome] = useState('');
@@ -553,33 +549,59 @@ function App() {
     return user.parent_agente_id || user.id;
   };
 
-  // Métodos de visibilidade baseados no agente logado
+  // Obter todos os IDs que pertencem à mesma equipa (Agente Principal + Sub-agentes/Assistentes)
+  const getTeamAgentIds = (user: Agente | null): string[] => {
+    if (!user) return [];
+    const leaderId = user.parent_agente_id || user.id;
+    const subAgentIds = agentes.filter(a => a.parent_agente_id === leaderId).map(a => a.id);
+    return Array.from(new Set([leaderId, ...subAgentIds]));
+  };
+
+  // Métodos de visibilidade baseados no agente logado e na sua equipa
   const getVisibleCompradores = () => {
     if (!currentUser) return [];
     let result = [...compradores];
     if (currentUser.role === 'Agente') {
-      const principalId = getAgentePrincipalId(currentUser);
-      result = result.filter(c => c.agente_id === principalId);
+      const teamIds = getTeamAgentIds(currentUser);
+      result = result.filter(c => c.agente_id && teamIds.includes(c.agente_id));
     } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
-      result = result.filter(c => c.agente_id === adminSelectedAgenteId);
+      const selectedAgent = agentes.find(a => a.id === adminSelectedAgenteId);
+      const teamIds = selectedAgent ? getTeamAgentIds(selectedAgent) : [adminSelectedAgenteId];
+      result = result.filter(c => c.agente_id && teamIds.includes(c.agente_id));
     }
     return result;
   };
 
   const getVisibleVendedores = () => {
     if (!currentUser) return [];
-    // A carteira de imóveis da agência é visível para todos os consultores poderem cruzar com os seus clientes
-    return [...vendedores];
+    let result = [...vendedores];
+    if (currentUser.role === 'Agente') {
+      const teamIds = getTeamAgentIds(currentUser);
+      result = result.filter(v => v.agente_id && teamIds.includes(v.agente_id));
+    } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
+      const selectedAgent = agentes.find(a => a.id === adminSelectedAgenteId);
+      const teamIds = selectedAgent ? getTeamAgentIds(selectedAgent) : [adminSelectedAgenteId];
+      result = result.filter(v => v.agente_id && teamIds.includes(v.agente_id));
+    }
+    return result;
   };
 
   const getVisibleMatches = () => {
     if (!currentUser) return [];
     let result = [...allMatches];
     if (currentUser.role === 'Agente') {
-      const principalId = getAgentePrincipalId(currentUser);
-      result = result.filter(m => m.comprador_agente_id === principalId);
+      const teamIds = getTeamAgentIds(currentUser);
+      result = result.filter(m => 
+        (m.comprador_agente_id && teamIds.includes(m.comprador_agente_id)) ||
+        (m.imovel_agente_id && teamIds.includes(m.imovel_agente_id))
+      );
     } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
-      result = result.filter(m => m.comprador_agente_id === adminSelectedAgenteId);
+      const selectedAgent = agentes.find(a => a.id === adminSelectedAgenteId);
+      const teamIds = selectedAgent ? getTeamAgentIds(selectedAgent) : [adminSelectedAgenteId];
+      result = result.filter(m => 
+        (m.comprador_agente_id && teamIds.includes(m.comprador_agente_id)) ||
+        (m.imovel_agente_id && teamIds.includes(m.imovel_agente_id))
+      );
     }
     return result;
   };
@@ -588,20 +610,22 @@ function App() {
     if (!currentUser) return [];
     let result = [...atividades];
     if (currentUser.role === 'Agente') {
-      const principalId = getAgentePrincipalId(currentUser);
+      const teamIds = getTeamAgentIds(currentUser);
       result = result.filter(act => {
         const comp = compradores.find(c => c.id === act.comprador_id);
         const imov = vendedores.find(v => v.id === act.imovel_id);
-        const compOwns = comp ? comp.agente_id === principalId : false;
-        const imovOwns = imov ? imov.agente_id === principalId : false;
+        const compOwns = comp && comp.agente_id ? teamIds.includes(comp.agente_id) : false;
+        const imovOwns = imov && imov.agente_id ? teamIds.includes(imov.agente_id) : false;
         return compOwns || imovOwns || (!act.comprador_id && !act.imovel_id);
       });
     } else if (currentUser.role === 'Admin' && adminSelectedAgenteId !== 'Geral') {
+      const selectedAgent = agentes.find(a => a.id === adminSelectedAgenteId);
+      const teamIds = selectedAgent ? getTeamAgentIds(selectedAgent) : [adminSelectedAgenteId];
       result = result.filter(act => {
         const comp = compradores.find(c => c.id === act.comprador_id);
         const imov = vendedores.find(v => v.id === act.imovel_id);
-        const compOwns = comp ? comp.agente_id === adminSelectedAgenteId : false;
-        const imovOwns = imov ? imov.agente_id === adminSelectedAgenteId : false;
+        const compOwns = comp && comp.agente_id ? teamIds.includes(comp.agente_id) : false;
+        const imovOwns = imov && imov.agente_id ? teamIds.includes(imov.agente_id) : false;
         return compOwns || imovOwns;
       });
     }
@@ -665,18 +689,85 @@ function App() {
     }
   };
 
+  // Verificação e escuta da sessão Google OAuth
   useEffect(() => {
+    const checkGoogleAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email) {
+          const userEmail = session.user.email.toLowerCase();
+          const { data: agentData } = await supabase
+            .from('perfis_agentes')
+            .select('*')
+            .ilike('email', userEmail)
+            .maybeSingle();
+
+          if (agentData) {
+            localStorage.setItem('crm_current_user', JSON.stringify(agentData));
+            setCurrentUser(agentData);
+            showToast(`Bem-vindo, ${agentData.nome}! (Google)`, 'success');
+          } else {
+            setLoginError(`A conta Google (${session.user.email}) não está registada no CRM.`);
+            await supabase.auth.signOut();
+          }
+        }
+      } catch (err) {
+        console.error('Erro na autenticação Google:', err);
+      }
+    };
+
+    checkGoogleAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+      if (event === 'SIGNED_IN' && session?.user?.email) {
+        const userEmail = session.user.email.toLowerCase();
+        const { data: agentData } = await supabase
+          .from('perfis_agentes')
+          .select('*')
+          .ilike('email', userEmail)
+          .maybeSingle();
+
+        if (agentData) {
+          localStorage.setItem('crm_current_user', JSON.stringify(agentData));
+          setCurrentUser(agentData);
+          showToast(`Bem-vindo, ${agentData.nome}! (Google)`, 'success');
+        } else {
+          setLoginError(`A conta Google (${session.user.email}) não está registada no CRM.`);
+          await supabase.auth.signOut();
+        }
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      const userKey = 'crm_imoveis_importados_radar_' + getAgentePrincipalId(currentUser);
+      const saved = localStorage.getItem(userKey);
+      try {
+        setImoveisImportados(saved ? JSON.parse(saved) : []);
+      } catch {
+        setImoveisImportados([]);
+      }
+    } else {
+      setImoveisImportados([]);
+    }
     fetchData();
   }, [currentUser]);
 
-  // Persistência da Carteira de Importações
+  // Persistência da Carteira de Importações por Utilizador/Equipa
   useEffect(() => {
+    if (!currentUser) return;
     try {
-      localStorage.setItem('crm_imoveis_importados_radar', JSON.stringify(imoveisImportados));
+      const userKey = 'crm_imoveis_importados_radar_' + getAgentePrincipalId(currentUser);
+      localStorage.setItem(userKey, JSON.stringify(imoveisImportados));
     } catch (e) {
       console.error('Erro ao guardar importações no localStorage:', e);
     }
-  }, [imoveisImportados]);
+  }, [imoveisImportados, currentUser]);
 
   // Parser Universal para Ficheiros BetterPlace (XLS, XLSX, CSV, TSV)
   const parseBetterPlaceBuffer = (data: ArrayBuffer): ImovelImportado[] => {
@@ -976,6 +1067,7 @@ function App() {
     setVFreguesia(imovel.localizacao);
     setVOrigemContacto('BetterPlace');
     setVEstadoImovel(imovel.tipo_anunciante === 'Agência' ? 'Num Parceiro' : 'Ativo');
+    setVAgenteId(currentUser?.id || '');
 
     // Marcar como promovido na lista
     setImoveisImportados(prev => prev.map(item => item.id === imovel.id ? { ...item, promovido_oficial: true } : item));
@@ -987,6 +1079,24 @@ function App() {
   };
 
   // Handlers de Autenticação e Agentes
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoggingIn(true);
+      setLoginError('');
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      setIsLoggingIn(false);
+      setLoginError('Erro ao iniciar sessão com o Google: ' + (err.message || String(err)));
+      showToast('Erro no login Google: ' + (err.message || String(err)), 'error');
+    }
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -1007,7 +1117,12 @@ function App() {
     setIsLoggingIn(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Erro ao terminar sessão OAuth:', e);
+    }
     localStorage.removeItem('crm_current_user');
     setCurrentUser(null);
     setVendedores([]);
@@ -1029,7 +1144,7 @@ function App() {
         email: sanitizeInput(novoAgenteEmail, 100).toLowerCase(),
         senha: sanitizeInput(novoAgenteSenha, 50),
         role: currentUser?.role === 'Admin' ? novoAgenteRole : 'Agente',
-        parent_agente_id: currentUser?.role === 'Admin' ? null : currentUser?.id
+        parent_agente_id: currentUser?.role === 'Admin' ? (novoAgenteRole === 'Admin' ? null : (novoAgenteParentId || null)) : currentUser?.id
       };
 
       const { error } = await supabase
@@ -1043,6 +1158,7 @@ function App() {
       setNovoAgenteEmail('');
       setNovoAgenteSenha('');
       setNovoAgenteRole('Agente');
+      setNovoAgenteParentId('');
       fetchData(); // recarregar agentes
     } catch (err: any) {
       showToast('Erro ao criar utilizador: ' + err.message, 'error');
@@ -1148,6 +1264,7 @@ function App() {
       observacoes: vObs ? sanitizeInput(vObs, 500) : null,
       estado_imovel: vEstadoImovel,
       origem_contacto: sanitizeInput(vOrigemContacto === 'Outro' ? (vOrigemContactoPersonalizada || 'Outro') : vOrigemContacto, 50),
+      agente_id: vAgenteId || currentUser?.id || null,
       updated_at: new Date().toISOString()
     };
 
@@ -1164,10 +1281,7 @@ function App() {
       } else {
         const { error } = await supabase
           .from('vendedores_imoveis')
-          .insert([{
-            ...imovelPayload,
-            agente_id: getAgentePrincipalId(currentUser)
-          }]);
+          .insert([imovelPayload]);
 
         if (error) throw error;
         showToast('Imóvel adicionado!');
@@ -1609,6 +1723,7 @@ function App() {
     setVUrgencia(imovel.urgencia);
     setVObs(imovel.observacoes || '');
     setVEstadoImovel(imovel.estado_imovel || 'Ativo');
+    setVAgenteId(imovel.agente_id || currentUser?.id || '');
     
     const vOrigVal = imovel.origem_contacto || 'Outro';
     if (origensDisponiveis.includes(vOrigVal) && vOrigVal !== 'Outro') {
@@ -1874,6 +1989,10 @@ function App() {
 
     if (fImovelOrigem !== 'Todos') {
       result = result.filter(v => v.origem_contacto === fImovelOrigem);
+    }
+
+    if (fImovelAgenteId !== 'Todos') {
+      result = result.filter(v => v.agente_id === fImovelAgenteId);
     }
 
     result.sort((a, b) => {
@@ -2158,14 +2277,31 @@ function App() {
             <p className="login-subtitle">Gestão Inteligente de Leads e Negócios</p>
           </div>
 
-          <form onSubmit={handleLogin} className="login-form">
-            {loginError && (
-              <div className="login-error-alert">
-                <AlertTriangle size={18} />
-                <span>{loginError}</span>
-              </div>
-            )}
+          {loginError && (
+            <div className="login-error-alert" style={{ marginBottom: '1.25rem' }}>
+              <AlertTriangle size={18} />
+              <span>{loginError}</span>
+            </div>
+          )}
 
+          <button 
+            type="button" 
+            className="btn-google" 
+            onClick={handleGoogleLogin}
+            disabled={isLoggingIn}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span>Continuar com o Google</span>
+          </button>
+
+          <div className="login-divider">ou aceder com credenciais</div>
+
+          <form onSubmit={handleLogin} className="login-form">
             <div className="form-group">
               <label htmlFor="login-email">Endereço de E-mail</label>
               <input 
@@ -2179,7 +2315,7 @@ function App() {
               />
             </div>
 
-            <div className="form-group" style={{ marginTop: '1rem' }}>
+            <div className="form-group">
               <label htmlFor="login-senha">Palavra-passe</label>
               <input 
                 id="login-senha"
@@ -2195,10 +2331,10 @@ function App() {
             <button 
               type="submit" 
               className="btn btn-primary" 
-              style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center', height: '44px' }}
+              style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', height: '44px' }}
               disabled={isLoggingIn}
             >
-              {isLoggingIn ? 'A entrar...' : 'Entrar na Plataforma'}
+              {isLoggingIn ? 'A entrar...' : 'Entrar com E-mail'}
             </button>
           </form>
         </div>
@@ -2392,6 +2528,7 @@ function App() {
                 setVEstadoImovel('Ativo');
                 setVOrigemContacto('Outro');
                 setVOrigemContactoPersonalizada('');
+                setVAgenteId(currentUser?.id || '');
                 setIsImovelModalOpen(true);
               }}
             >
@@ -2458,7 +2595,7 @@ function App() {
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Imóveis Registados</span>
                     <Building size={18} style={{ color: 'var(--accent-gold)' }} />
                   </div>
-                  <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '0.5rem' }}>{vendedores.length}</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 700, marginTop: '0.5rem' }}>{getVisibleVendedores().length}</div>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Captações sob gestão</span>
                 </div>
 
@@ -2961,6 +3098,13 @@ function App() {
                     ))}
                   </select>
 
+                  <select value={fImovelAgenteId} onChange={e => setFImovelAgenteId(e.target.value)} className="filter-select">
+                    <option value="Todos">Todos os Angariadores</option>
+                    {agentes.map(a => (
+                      <option key={a.id} value={a.id}>👤 {a.nome}</option>
+                    ))}
+                  </select>
+
                   <select value={sortImoveisBy} onChange={e => setSortImoveisBy(e.target.value)} className="filter-select" style={{ marginLeft: 'auto' }}>
                     <option value="data-desc">Mais Recentes</option>
                     <option value="data-asc">Mais Antigos</option>
@@ -3020,6 +3164,7 @@ function App() {
                         setVEstadoImovel('Ativo');
                         setVOrigemContacto('Outro');
                         setVOrigemContactoPersonalizada('');
+                        setVAgenteId(currentUser?.id || '');
                         setIsImovelModalOpen(true);
                       }}
                     >
@@ -3038,6 +3183,7 @@ function App() {
                         <th>Especificações</th>
                         <th>Localização</th>
                         <th>Preço Anunciado / m²</th>
+                        <th>Angariador</th>
                         <th>Controlo Temporal</th>
                         <th>Estado Ficha</th>
                         <th>Origem</th>
@@ -3121,6 +3267,17 @@ function App() {
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }} title="Preço por metro quadrado">
                               💶 {formatCurrency(Math.round(imovel.preco_objetivo / (imovel.area_m2 || 1)))}/m²
                             </div>
+                          </td>
+                          <td>
+                            {(() => {
+                              const angariador = agentes.find(a => a.id === imovel.agente_id);
+                              return (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  <span style={{ fontSize: '0.85rem' }}>👤</span>
+                                  <span>{angariador?.nome || 'Geral'}</span>
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td>
                             <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
@@ -3279,6 +3436,15 @@ function App() {
                           <div className="mobile-card-detail">
                             <span className="detail-label">Origem:</span>
                             <span className="detail-value">{imovel.origem_contacto || 'Outro'}</span>
+                          </div>
+                          <div className="mobile-card-detail">
+                            <span className="detail-label">Angariador:</span>
+                            <span className="detail-value">
+                              {(() => {
+                                const angariador = agentes.find(a => a.id === imovel.agente_id);
+                                return angariador?.nome || 'Geral';
+                              })()}
+                            </span>
                           </div>
                         </div>
 
@@ -4622,14 +4788,14 @@ function App() {
                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail</label>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail (Conta Google / Acesso)*</label>
                       <input 
                         type="email" 
                         className="input-text" 
                         value={novoAgenteEmail} 
                         maxLength={100}
                         onChange={(e) => setNovoAgenteEmail(e.target.value)} 
-                        placeholder="email@imo.com" 
+                        placeholder="ex: tomas@gmail.com" 
                         required
                       />
                     </div>
@@ -4653,10 +4819,28 @@ function App() {
                         onChange={(e) => setNovoAgenteRole(e.target.value as 'Admin' | 'Agente')}
                         style={{ margin: 0 }}
                       >
-                        <option value="Agente">Agente Normal</option>
+                        <option value="Agente">Agente / Consultor</option>
                         <option value="Admin">Administrador</option>
                       </select>
                     </div>
+
+                    {novoAgenteRole === 'Agente' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 2' : 'span 1', marginTop: '10px' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>Equipa / Agente Principal</label>
+                        <select 
+                          className="input-select" 
+                          value={novoAgenteParentId} 
+                          onChange={(e) => setNovoAgenteParentId(e.target.value)}
+                          style={{ margin: 0 }}
+                        >
+                          <option value="">Nenhum (Agente Principal / Independente)</option>
+                          {agentes.filter(a => !a.parent_agente_id && a.role !== 'Admin').map(a => (
+                            <option key={a.id} value={a.id}>Equipa de: {a.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <button 
                       type="submit" 
                       className="btn btn-primary" 
@@ -4749,14 +4933,14 @@ function App() {
                           />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: window.innerWidth <= 600 ? 'span 3' : 'span 1' }}>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail da Subconta</label>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 600 }}>E-mail da Subconta (Conta Google)*</label>
                           <input 
                             type="email" 
                             className="input-text" 
                             value={novoAgenteEmail} 
                             maxLength={100}
                             onChange={(e) => setNovoAgenteEmail(e.target.value)} 
-                            placeholder="email@imo.com" 
+                            placeholder="ex: assistente@gmail.com" 
                             required
                           />
                         </div>
@@ -5166,6 +5350,26 @@ function App() {
               </div>
 
               <div className="form-group form-group-full">
+                <label>Consultor Angariador (Criado por)*</label>
+                <select 
+                  value={vAgenteId} 
+                  onChange={(e) => setVAgenteId(e.target.value)}
+                  className="input-select"
+                  disabled={currentUser?.role !== 'Admin'}
+                  required
+                >
+                  {agentes.map(a => (
+                    <option key={a.id} value={a.id}>👤 {a.nome} ({a.role === 'Admin' ? 'Administrador' : 'Consultor'})</option>
+                  ))}
+                </select>
+                {currentUser?.role !== 'Admin' && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Atribuído automaticamente ao consultor com sessão iniciada.
+                  </span>
+                )}
+              </div>
+
+              <div className="form-group form-group-full">
                 <label>Observações</label>
                 <textarea 
                   rows={2} 
@@ -5506,7 +5710,7 @@ function App() {
                         required={cAssociarImovel}
                       >
                         <option value="">-- Selecione um imóvel da lista --</option>
-                        {vendedores.map(imovel => (
+                        {getVisibleVendedores().map(imovel => (
                           <option key={imovel.id} value={imovel.id}>
                             {imovel.proprietario_nome} - {imovel.tipo_imovel} ({imovel.tipologia}) em {imovel.cidade} - {formatCurrency(imovel.preco_objetivo)}
                           </option>
@@ -5659,7 +5863,7 @@ function App() {
                   <label>Imóvel / Vendedor</label>
                   <select value={actImovelId} onChange={e => setActImovelId(e.target.value)} required={associarImovel}>
                     <option value="">-- Selecione Imóvel --</option>
-                    {vendedores.map(v => (
+                    {getVisibleVendedores().map(v => (
                       <option key={v.id} value={v.id}>{v.tipo_imovel} ({v.tipologia}) - Prop: {v.proprietario_nome}</option>
                     ))}
                   </select>
@@ -5907,7 +6111,7 @@ function App() {
                     <button className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '0.75rem' }} onClick={() => setAssociationMode('decision')}>Voltar</button>
                   </div>
                   <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
-                    {vendedores.map(imovel => (
+                    {getVisibleVendedores().map(imovel => (
                       <div 
                         key={imovel.id} 
                         onClick={() => handleAssociateToImovel(imovel.id)}
