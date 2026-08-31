@@ -743,6 +743,42 @@ function App() {
     };
   }, []);
 
+  // Inicialização do Google Identity Services (GIS) para login nativo
+  useEffect(() => {
+    if (currentUser) return;
+
+    const setupGoogleGIS = () => {
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+        try {
+          (window as any).google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+
+          const btnElem = document.getElementById('google-signin-native-btn');
+          if (btnElem) {
+            btnElem.innerHTML = '';
+            (window as any).google.accounts.id.renderButton(btnElem, {
+              theme: 'outline',
+              size: 'large',
+              width: btnElem.offsetWidth || 360,
+              text: 'continue_with',
+              shape: 'rectangular',
+              logo_alignment: 'left',
+            });
+          }
+        } catch (e) {
+          console.warn('Google GIS setup notice:', e);
+        }
+      }
+    };
+
+    const timer = setTimeout(setupGoogleGIS, 400);
+    return () => clearTimeout(timer);
+  }, [currentUser]);
+
   useEffect(() => {
     if (currentUser) {
       const userKey = 'crm_imoveis_importados_radar_' + getAgentePrincipalId(currentUser);
@@ -1079,17 +1115,86 @@ function App() {
   };
 
   // Handlers de Autenticação e Agentes
+  const GOOGLE_CLIENT_ID = '682752230449-tbfet7o0kaoir8c06hgirogvbqlmc3bu.apps.googleusercontent.com';
+
+  const handleGoogleCredentialResponse = async (response: any) => {
+    if (!response?.credential) return;
+    try {
+      setIsLoggingIn(true);
+      setLoginError('');
+
+      // 1. Decodificar payload do token JWT da Google
+      const base64Url = response.credential.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const googleUser = JSON.parse(jsonPayload);
+      const userEmail = (googleUser.email || '').toLowerCase();
+
+      if (!userEmail) throw new Error('Não foi possível obter o e-mail da conta Google.');
+
+      // 2. Sincronizar sessão com o Supabase via ID Token
+      try {
+        await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: response.credential,
+        });
+      } catch (supaAuthErr) {
+        console.warn('Sincronização Supabase Auth:', supaAuthErr);
+      }
+
+      // 3. Procurar perfil de agente correspondente na base de dados
+      const { data: agentData } = await supabase
+        .from('perfis_agentes')
+        .select('*')
+        .ilike('email', userEmail)
+        .maybeSingle();
+
+      if (agentData) {
+        localStorage.setItem('crm_current_user', JSON.stringify(agentData));
+        setCurrentUser(agentData);
+        showToast(`Bem-vindo, ${agentData.nome}! (Google)`, 'success');
+      } else {
+        setLoginError(`A conta Google (${googleUser.email}) não está registada na agência.`);
+      }
+    } catch (err: any) {
+      console.error('Erro no Google Sign-In:', err);
+      setLoginError('Erro no login Google: ' + (err.message || String(err)));
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     try {
       setIsLoggingIn(true);
       setLoginError('');
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (error) throw error;
+
+      // Tentar abrir prompt nativo do Google GIS primeiro
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+        (window as any).google.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            supabase.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                redirectTo: window.location.origin
+              }
+            });
+          }
+        });
+      } else {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin
+          }
+        });
+        if (error) throw error;
+      }
     } catch (err: any) {
       setIsLoggingIn(false);
       setLoginError('Erro ao iniciar sessão com o Google: ' + (err.message || String(err)));
@@ -2306,20 +2411,22 @@ function App() {
             </div>
           )}
 
-          <button 
-            type="button" 
-            className="btn-google" 
-            onClick={handleGoogleLogin}
-            disabled={isLoggingIn}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-            </svg>
-            <span>Continuar com o Google</span>
-          </button>
+          <div id="google-signin-native-btn" style={{ width: '100%', display: 'flex', justifyContent: 'center', minHeight: '44px', marginBottom: '0.25rem' }}>
+            <button 
+              type="button" 
+              className="btn-google" 
+              onClick={handleGoogleLogin}
+              disabled={isLoggingIn}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>Continuar com o Google</span>
+            </button>
+          </div>
 
           <div className="login-divider">ou aceder com credenciais</div>
 
